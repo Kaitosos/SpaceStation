@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Space Station Prototype 0.1</title>
+  <style>
+    :root {
+      font-family: system-ui, sans-serif;
+      color-scheme: dark;
+    }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top, #17172d 0, #050510 60%);
+      color: #f5f5ff;
+      overflow: hidden;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    #hud {
+      padding: 8px 12px;
+      background: rgba(5, 5, 20, 0.9);
+      border-bottom: 1px solid #26264e;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      font-size: 14px;
+    }
+
+    #resources {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .resource {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(15, 15, 40, 0.9);
+      border: 1px solid rgba(80, 80, 140, 0.8);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .resource-name {
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      font-size: 11px;
+      color: #8be9ff;
+    }
+
+    .resource-value {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .resource-delta {
+      font-variant-numeric: tabular-nums;
+      font-size: 11px;
+    }
+
+    .delta-positive {
+      color: #4afc8f;
+    }
+
+    .delta-negative {
+      color: #ff6b81;
+    }
+
+    #time-display {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    #main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 0;
+    }
+
+    #build-menu {
+      padding: 10px;
+      border-right: 1px solid #26264e;
+      background: rgba(8, 8, 24, 0.95);
+      overflow-y: auto;
+    }
+
+    #build-menu h2 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #ff79c6;
+    }
+
+    .build-button {
+      width: 100%;
+      text-align: left;
+      padding: 8px;
+      margin-bottom: 6px;
+      background: rgba(15, 15, 40, 0.9);
+      border-radius: 8px;
+      border: 1px solid rgba(70, 70, 120, 0.8);
+      cursor: pointer;
+      font-size: 12px;
+      transition: transform 0.05s ease, box-shadow 0.05s ease, border-color 0.1s ease;
+    }
+
+    .build-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+      border-color: #00f5ff;
+    }
+
+    .build-button.selected {
+      border-color: #50fa7b;
+      box-shadow: 0 0 8px rgba(80, 250, 123, 0.4);
+    }
+
+    .build-name {
+      font-weight: 600;
+      margin-bottom: 2px;
+      color: #f8f8f2;
+    }
+
+    .build-cost,
+    .build-desc {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+
+    #grid-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+    }
+
+    #grid {
+      display: grid;
+      gap: 2px;
+      background: rgba(10, 10, 30, 0.9);
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid rgba(60, 60, 120, 0.9);
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+    }
+
+    .cell {
+      width: 26px;
+      height: 26px;
+      border-radius: 4px;
+      background: rgba(20, 20, 50, 0.9);
+      border: 1px solid rgba(50, 50, 90, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      cursor: pointer;
+      color: #c8c8ff;
+      user-select: none;
+      transition: background 0.05s ease, border-color 0.05s ease, transform 0.05s ease;
+    }
+
+    .cell:hover {
+      border-color: #00f5ff;
+      transform: translateY(-1px);
+    }
+
+    .cell.empty {
+      opacity: 0.15;
+    }
+
+    .cell.building-generator {
+      background: linear-gradient(135deg, #283d63, #1b2137);
+      border-color: #00f5ff;
+    }
+
+    .cell.building-life_support {
+      background: linear-gradient(135deg, #1e4635, #192326);
+      border-color: #50fa7b;
+    }
+
+    .cell.building-habitat {
+      background: linear-gradient(135deg, #46315c, #251730);
+      border-color: #ff79c6;
+    }
+
+    .cell.building-energy_storage {
+      background: linear-gradient(135deg, #2d3d4f, #1a232d);
+      border-color: #bd93f9;
+    }
+
+    .cell.building-oxygen_storage {
+      background: linear-gradient(135deg, #25424e, #16272f);
+      border-color: #8be9fd;
+    }
+
+    .cell.building-dock {
+      background: linear-gradient(135deg, #4d2d34, #261217);
+      border-color: #ffb86c;
+    }
+
+    #log {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-top: 1px solid #26264e;
+      background: rgba(5, 5, 15, 0.95);
+      height: 48px;
+      overflow-y: auto;
+      color: #bbbbff;
+    }
+
+    .log-entry {
+      opacity: 0.85;
+      white-space: nowrap;
+    }
+
+    #event-popup {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.95));
+      z-index: 10;
+    }
+
+    #event-popup.hidden {
+      display: none;
+    }
+
+    .popup-content {
+      background: radial-gradient(circle at top, #20203f, #0b0b1a);
+      border-radius: 16px;
+      padding: 16px 18px 14px;
+      border: 1px solid #ff79c6;
+      box-shadow: 0 0 30px rgba(255, 121, 198, 0.5);
+      max-width: 420px;
+    }
+
+    .popup-content h2 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      color: #ff79c6;
+    }
+
+    .popup-content p {
+      margin: 0 0 12px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    #popup-ok-button {
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid #50fa7b;
+      background: linear-gradient(90deg, #189965, #29b47d);
+      color: #04120b;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    #popup-ok-button:hover {
+      filter: brightness(1.1);
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div id="resources"></div>
+    <div id="time-display"></div>
+  </div>
+
+  <div id="main">
+    <div id="build-menu"></div>
+    <div id="grid-container">
+      <div id="grid"></div>
+    </div>
+  </div>
+
+  <div id="log"></div>
+
+  <div id="event-popup" class="hidden">
+    <div class="popup-content">
+      <h2 id="popup-title">Event</h2>
+      <p id="popup-message">...</p>
+      <button id="popup-ok-button">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kompilierter TypeScript-Code -->
+<script type="module" src="./dist/main.js"></script>
+</body>
+</html>
