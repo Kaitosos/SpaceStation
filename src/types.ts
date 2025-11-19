@@ -68,6 +68,7 @@ export interface EventOption {
   text: string;
   explanation?: string;
   effects: ResourceDelta[];
+  enableBuildings?: string[];
 }
 
 export interface Person {
@@ -82,6 +83,7 @@ export interface Cell {
   x: number;
   y: number;
   buildingTypeId: string | null;
+  isRoot?: boolean;
 }
 
 export interface Grid {
@@ -95,6 +97,10 @@ export interface BuildingType {
   name: string;
   shortName: string;
   description: string;
+  type: string;
+  size: { width: number; height: number };
+  image?: string;
+  enabled: boolean;
   cost: ResourceDelta[];
   perTick: ResourceDelta[];
   maxBonus: ResourceDelta[];

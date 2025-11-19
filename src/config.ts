@@ -37,6 +37,11 @@ export const BUILDING_TYPES: BuildingType[] = [
     name: 'Generator',
     shortName: 'G',
     description: 'Produziert Energie pro Tick.',
+    type: 'energie',
+    size: { width: 2, height: 2 },
+    image:
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="%23112846"/><path d="M28 8h12l-8 20h10L24 56l6-22H20L28 8Z" fill="%2300f5ff"/></svg>',
+    enabled: true,
     cost: [{ resource: 'money', amount: 200 }],
     perTick: [{ resource: 'energy', amount: 12 }],
     maxBonus: [],
@@ -46,6 +51,11 @@ export const BUILDING_TYPES: BuildingType[] = [
     name: 'Lebenserhaltung',
     shortName: 'L',
     description: 'Verbraucht Energie, erzeugt Sauerstoff.',
+    type: 'versorgung',
+    size: { width: 1, height: 2 },
+    image:
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="%2336d1a8"/><stop offset="1" stop-color="%2313242e"/></linearGradient></defs><rect width="64" height="64" rx="12" fill="url(%23g)"/><circle cx="32" cy="22" r="10" fill="%2300f5ff" opacity="0.8"/><path d="M22 40h20v8H22z" fill="%2300f5ff" opacity="0.6"/></svg>',
+    enabled: true,
     cost: [{ resource: 'money', amount: 300 }],
     perTick: [
       { resource: 'energy', amount: -5 },
@@ -58,6 +68,11 @@ export const BUILDING_TYPES: BuildingType[] = [
     name: 'Wohnmodul',
     shortName: 'H',
     description: 'Erhöht maximale Bevölkerung, verbraucht etwas Energie.',
+    type: 'wohnen',
+    size: { width: 2, height: 2 },
+    image:
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%23302744"/><path d="M16 38h32v14H16z" fill="%23ff79c6" opacity="0.65"/><path d="M14 30 32 14l18 16v4H14z" fill="%23ff79c6" opacity="0.85"/></svg>',
+    enabled: true,
     cost: [{ resource: 'money', amount: 250 }],
     perTick: [{ resource: 'energy', amount: -3 }],
     maxBonus: [{ resource: 'population', amount: 5 }],
@@ -67,6 +82,11 @@ export const BUILDING_TYPES: BuildingType[] = [
     name: 'Energiespeicher',
     shortName: 'E',
     description: 'Erhöht maximal speicherbare Energie.',
+    type: 'speicher',
+    size: { width: 1, height: 1 },
+    image:
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="%232c3b4f"/><path d="M18 16h28v32H18z" fill="%23bd93f9" opacity="0.75"/><path d="M34 22v6h6l-10 14v-6h-6l10-14Z" fill="%23212a36"/></svg>',
+    enabled: true,
     cost: [{ resource: 'money', amount: 300 }],
     perTick: [],
     maxBonus: [{ resource: 'energy', amount: 50 }],
@@ -76,6 +96,11 @@ export const BUILDING_TYPES: BuildingType[] = [
     name: 'O2-Tank',
     shortName: 'O',
     description: 'Erhöht maximal speicherbaren Sauerstoff.',
+    type: 'speicher',
+    size: { width: 1, height: 1 },
+    image:
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="%23162930"/><circle cx="32" cy="28" r="12" fill="%238be9fd" opacity="0.8"/><path d="M22 40h20v8H22z" fill="%238be9fd" opacity="0.6"/></svg>',
+    enabled: true,
     cost: [{ resource: 'money', amount: 300 }],
     perTick: [],
     maxBonus: [{ resource: 'oxygen', amount: 50 }],
@@ -85,8 +110,27 @@ export const BUILDING_TYPES: BuildingType[] = [
     name: 'Dock',
     shortName: 'D',
     description: 'Ermöglicht Zuzug neuer Bewohner & etwas Einkommen.',
+    type: 'logistik',
+    size: { width: 3, height: 1 },
+    image:
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="%23341a1f"/><path d="M10 36h44v12H10z" fill="%23ffb86c" opacity="0.8"/><path d="M14 22h36v10H14z" fill="%23ffb86c" opacity="0.6"/></svg>',
+    enabled: true,
     cost: [{ resource: 'money', amount: 400 }],
     perTick: [{ resource: 'money', amount: 2 }],
+    maxBonus: [],
+  },
+  {
+    id: 'science_lab',
+    name: 'Forschungslabor',
+    shortName: 'R',
+    description: 'Großes Forschungsmodul, schaltet künftige Technologien frei.',
+    type: 'forschung',
+    size: { width: 3, height: 3 },
+    image:
+      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%23222a48"/><path d="M22 14h8v18l-6 12v6h-6v-8l4-8V14z" fill="%23ff79c6" opacity="0.85"/><path d="M34 14h8v16l6 12v8h-6v-6l-6-12V14z" fill="%238be9fd" opacity="0.85"/><circle cx="32" cy="34" r="6" fill="%23bd93f9"/></svg>',
+    enabled: false,
+    cost: [{ resource: 'money', amount: 800 }],
+    perTick: [{ resource: 'energy', amount: -10 }],
     maxBonus: [],
   },
 ];
@@ -132,8 +176,10 @@ export const EVENT_CONFIGS: EventConfig[] = [
       {
         id: 'accept_investment',
         text: 'Geld annehmen',
-        explanation: 'Schnelle Liquidität, aber du schuldet ihm einen Gefallen.',
+        explanation:
+          'Schnelle Liquidität, aber du schuldet ihm einen Gefallen. Das Labor wird freigeschaltet.',
         effects: [{ resource: 'money', amount: 500 }],
+        enableBuildings: ['science_lab'],
       },
       {
         id: 'decline_investment',
