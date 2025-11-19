@@ -259,21 +259,46 @@
       line-height: 1.4;
     }
 
-    #popup-ok-button {
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 1px solid #50fa7b;
-      background: linear-gradient(90deg, #189965, #29b47d);
-      color: #04120b;
-      font-weight: 600;
-      cursor: pointer;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+    #popup-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
-    #popup-ok-button:hover {
-      filter: brightness(1.1);
+    .popup-option {
+      width: 100%;
+      text-align: left;
+      padding: 10px;
+      border-radius: 10px;
+      background: rgba(15, 15, 40, 0.9);
+      border: 1px solid rgba(255, 121, 198, 0.5);
+      color: inherit;
+      cursor: pointer;
+      transition: border-color 0.15s ease, transform 0.05s ease, box-shadow 0.1s ease;
+    }
+
+    .popup-option:hover {
+      border-color: #50fa7b;
+      transform: translateY(-1px);
+      box-shadow: 0 0 10px rgba(80, 250, 123, 0.4);
+    }
+
+    .popup-option-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: #f8f8f2;
+    }
+
+    .popup-option-expl {
+      font-size: 12px;
+      opacity: 0.85;
+      margin-bottom: 4px;
+    }
+
+    .popup-option-effects {
+      font-size: 11px;
+      color: #8be9fd;
+      letter-spacing: 0.02em;
     }
   </style>
 </head>
@@ -297,7 +322,7 @@
     <div class="popup-content">
       <h2 id="popup-title">Event</h2>
       <p id="popup-message">...</p>
-      <button id="popup-ok-button">OK</button>
+      <div id="popup-options"></div>
     </div>
   </div>
 </div>

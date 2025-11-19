@@ -1,9 +1,5 @@
 // src/config.ts
-import {
-  ResourceConfig,
-  BuildingType,
-  EventConfig,
-} from './types';
+import { ResourceConfig, BuildingType, EventConfig } from './types';
 
 export const RESOURCE_CONFIGS: ResourceConfig[] = [
   {
@@ -105,8 +101,22 @@ export const EVENT_CONFIGS: EventConfig[] = [
       { type: 'resource', resource: 'oxygen', comparator: 'lte', value: 20 },
       { type: 'time', ticksGte: 60 },
     ],
-    effects: [
-      { resource: 'money', amount: -100 },
+    options: [
+      {
+        id: 'buy_supplies',
+        text: 'Notvorräte einkaufen',
+        explanation: 'Beruhigt die Crew, kostet aber etwas Geld.',
+        effects: [
+          { resource: 'money', amount: -120 },
+          { resource: 'oxygen', amount: 20 },
+        ],
+      },
+      {
+        id: 'ride_it_out',
+        text: 'Aussitzen',
+        explanation: 'Keine unmittelbaren Maßnahmen. Hoffe auf schnelle Erholung.',
+        effects: [],
+      },
     ],
   },
   {
@@ -118,8 +128,19 @@ export const EVENT_CONFIGS: EventConfig[] = [
       { type: 'resource', resource: 'population', comparator: 'gte', value: 10 },
       { type: 'time', ticksGte: 100 },
     ],
-    effects: [
-      { resource: 'money', amount: 500 },
+    options: [
+      {
+        id: 'accept_investment',
+        text: 'Geld annehmen',
+        explanation: 'Schnelle Liquidität, aber du schuldet ihm einen Gefallen.',
+        effects: [{ resource: 'money', amount: 500 }],
+      },
+      {
+        id: 'decline_investment',
+        text: 'Ablehnen',
+        explanation: 'Keine Veränderungen, aber auch keine Bindungen.',
+        effects: [],
+      },
     ],
   },
 ];

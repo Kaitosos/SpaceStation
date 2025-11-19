@@ -10,6 +10,7 @@ import {
   Comparator,
   ConditionConfig,
   EventConfig,
+  EventOption,
   Cell,
 } from './types';
 import { RESOURCE_CONFIGS, BUILDING_TYPES, EVENT_CONFIGS } from './config';
@@ -189,18 +190,21 @@ export function checkEvents(game: GameState): void {
         id: evt.config.id,
         title: evt.config.title,
         message: evt.config.message,
-        effects: evt.config.effects,
+        options: evt.config.options,
       };
       return;
     }
   }
 }
 
-export function applyEventEffectsAndClose(game: GameState): void {
+export function applyEventOptionAndClose(
+  game: GameState,
+  option: EventOption,
+): void {
   const popup = game.activeEventPopup;
   if (!popup) return;
 
-  applyResourceDeltas(game.resources, popup.effects, +1);
+  applyResourceDeltas(game.resources, option.effects, +1);
 
   const evt = game.events.find((e) => e.config.id === popup.id);
   if (evt) {
@@ -208,7 +212,7 @@ export function applyEventEffectsAndClose(game: GameState): void {
   }
 
   game.activeEventPopup = null;
-  game.messages.push(`Event abgeschlossen: ${popup.title}`);
+  game.messages.push(`Event abgeschlossen: ${popup.title} – ${option.text}`);
 }
 
 // ---------- Grid / Gebäude ----------
