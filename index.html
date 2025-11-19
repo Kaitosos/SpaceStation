@@ -101,6 +101,23 @@
       color: #ff79c6;
     }
 
+    .build-filter {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: #a3a3c2;
+    }
+
+    .build-filter select {
+      background: rgba(20, 20, 40, 0.9);
+      color: inherit;
+      border: 1px solid rgba(70, 70, 120, 0.8);
+      border-radius: 6px;
+      padding: 4px 6px;
+    }
+
     .build-button {
       width: 100%;
       text-align: left;
@@ -131,10 +148,26 @@
       color: #f8f8f2;
     }
 
+    .build-meta {
+      font-size: 11px;
+      color: #a5adc6;
+      margin-bottom: 2px;
+    }
+
     .build-cost,
     .build-desc {
       font-size: 11px;
       opacity: 0.8;
+    }
+
+    .build-image {
+      margin-top: 6px;
+      height: 72px;
+      border-radius: 8px;
+      background: rgba(15, 15, 40, 0.7);
+      background-size: cover;
+      background-position: center;
+      border: 1px solid rgba(70, 70, 120, 0.6);
     }
 
     #grid-container {
@@ -168,6 +201,9 @@
       color: #c8c8ff;
       user-select: none;
       transition: background 0.05s ease, border-color 0.05s ease, transform 0.05s ease;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
     }
 
     .cell:hover {
@@ -299,6 +335,12 @@
       font-size: 11px;
       color: #8be9fd;
       letter-spacing: 0.02em;
+    }
+
+    .popup-option-unlocks {
+      font-size: 11px;
+      color: #50fa7b;
+      margin-top: 4px;
     }
   </style>
 </head>

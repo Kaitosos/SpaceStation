@@ -206,6 +206,16 @@ export function applyEventOptionAndClose(
 
   applyResourceDeltas(game.resources, option.effects, +1);
 
+  if (option.enableBuildings && option.enableBuildings.length) {
+    for (const id of option.enableBuildings) {
+      const type = BUILDING_TYPE_MAP.get(id);
+      if (type && !type.enabled) {
+        type.enabled = true;
+        game.messages.push('Neues Modul freigeschaltet: ' + type.name);
+      }
+    }
+  }
+
   const evt = game.events.find((e) => e.config.id === popup.id);
   if (evt) {
     evt.hasTriggered = true;
@@ -224,6 +234,24 @@ function getCell(game: GameState, x: number, y: number): Cell | null {
   return grid.cells[index] ?? null;
 }
 
+function getCellsForArea(
+  game: GameState,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): Cell[] | null {
+  const cells: Cell[] = [];
+  for (let dy = 0; dy < height; dy++) {
+    for (let dx = 0; dx < width; dx++) {
+      const cell = getCell(game, x + dx, y + dy);
+      if (!cell) return null;
+      cells.push(cell);
+    }
+  }
+  return cells;
+}
+
 export function placeBuildingAt(game: GameState, x: number, y: number): void {
   const buildingId = game.selectedBuildingTypeId;
   if (!buildingId) {
@@ -234,13 +262,25 @@ export function placeBuildingAt(game: GameState, x: number, y: number): void {
   const cell = getCell(game, x, y);
   if (!cell) return;
 
-  if (cell.buildingTypeId) {
-    game.messages.push('Dieses Feld ist bereits belegt.');
+  const type = BUILDING_TYPE_MAP.get(buildingId);
+  if (!type) return;
+
+  if (!type.enabled) {
+    game.messages.push('Dieses Modul ist noch gesperrt.');
     return;
   }
 
-  const type = BUILDING_TYPE_MAP.get(buildingId);
-  if (!type) return;
+  const size = type.size || { width: 1, height: 1 };
+  const cells = getCellsForArea(game, x, y, size.width, size.height);
+  if (!cells || cells.length !== size.width * size.height) {
+    game.messages.push('Das Modul passt hier nicht ins Raster.');
+    return;
+  }
+
+  if (cells.some((c) => c.buildingTypeId)) {
+    game.messages.push('Dieses Feld ist bereits belegt.');
+    return;
+  }
 
   if (!canAfford(game.resources, type.cost)) {
     game.messages.push('Nicht genug Ressourcen für ' + type.name + '.');
@@ -248,7 +288,10 @@ export function placeBuildingAt(game: GameState, x: number, y: number): void {
   }
 
   applyResourceDeltas(game.resources, type.cost, -1);
-  cell.buildingTypeId = type.id;
+  cells.forEach((c, idx) => {
+    c.buildingTypeId = type.id;
+    c.isRoot = idx === 0;
+  });
   game.messages.push('Gebaut: ' + type.name);
 }
 
@@ -263,7 +306,7 @@ export function trySpawnNewPerson(game: GameState): void {
 
   let dockCount = 0;
   for (const cell of game.grid.cells) {
-    if (cell.buildingTypeId === 'dock') dockCount++;
+    if (cell.buildingTypeId === 'dock' && cell.isRoot) dockCount++;
   }
   if (dockCount <= 0) return;
 
@@ -291,7 +334,7 @@ export function updateGameTick(game: GameState): void {
 
   // Gebäude-Effekte
   for (const cell of game.grid.cells) {
-    if (!cell.buildingTypeId) continue;
+    if (!cell.buildingTypeId || !cell.isRoot) continue;
     const type = BUILDING_TYPE_MAP.get(cell.buildingTypeId);
     if (!type) continue;
     addResourceChangesToDelta(delta, type.perTick, +1);

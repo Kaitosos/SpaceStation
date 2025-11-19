@@ -13,6 +13,7 @@ let popupTitleEl: HTMLElement;
 let popupMessageEl: HTMLElement;
 let popupOptionsEl: HTMLElement;
 let onChooseEventOption: ((option: EventOption) => void) | null = null;
+let selectedBuildTypeFilter: string | 'all' = 'all';
 
 function formatDelta(d: number): string {
   if (!d) return '±0/Tick';
@@ -74,7 +75,52 @@ function renderBuildMenu(game: GameState): void {
   header.textContent = 'Module';
   buildMenuEl.appendChild(header);
 
-  for (const type of BUILDING_TYPES) {
+  const availableTypes = BUILDING_TYPES.filter((t) => t.enabled);
+  const typeFilters = Array.from(new Set(availableTypes.map((t) => t.type))).sort();
+  if (selectedBuildTypeFilter !== 'all' && !typeFilters.includes(selectedBuildTypeFilter)) {
+    selectedBuildTypeFilter = 'all';
+  }
+
+  const filterBar = document.createElement('div');
+  filterBar.className = 'build-filter';
+  const filterLabel = document.createElement('label');
+  filterLabel.textContent = 'Typ:';
+  const filterSelect = document.createElement('select');
+  const allOption = document.createElement('option');
+  allOption.value = 'all';
+  allOption.textContent = 'Alle';
+  filterSelect.appendChild(allOption);
+  for (const t of typeFilters) {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = t;
+    filterSelect.appendChild(opt);
+  }
+  filterSelect.value = selectedBuildTypeFilter;
+  filterSelect.addEventListener('change', (ev) => {
+    selectedBuildTypeFilter = (ev.target as HTMLSelectElement).value as typeof selectedBuildTypeFilter;
+    if (
+      selectedBuildTypeFilter !== 'all' &&
+      game.selectedBuildingTypeId &&
+      BUILDING_TYPES.find((b) => b.id === game.selectedBuildingTypeId && b.type === selectedBuildTypeFilter)
+    ) {
+      renderBuildMenu(game);
+      return;
+    }
+    if (selectedBuildTypeFilter !== 'all' && game.selectedBuildingTypeId) {
+      game.selectedBuildingTypeId = null;
+    }
+    renderBuildMenu(game);
+  });
+  filterLabel.appendChild(filterSelect);
+  filterBar.appendChild(filterLabel);
+  buildMenuEl.appendChild(filterBar);
+
+  const filteredTypes = availableTypes.filter(
+    (t) => selectedBuildTypeFilter === 'all' || t.type === selectedBuildTypeFilter,
+  );
+
+  for (const type of filteredTypes) {
     const btn = document.createElement('button');
     btn.className = 'build-button';
     if (game.selectedBuildingTypeId === type.id) {
@@ -84,6 +130,10 @@ function renderBuildMenu(game: GameState): void {
     const nameDiv = document.createElement('div');
     nameDiv.className = 'build-name';
     nameDiv.textContent = type.name;
+
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'build-meta';
+    metaDiv.textContent = `Typ: ${type.type} • Größe: ${type.size.width}x${type.size.height}`;
 
     const costDiv = document.createElement('div');
     costDiv.className = 'build-cost';
@@ -97,9 +147,17 @@ function renderBuildMenu(game: GameState): void {
     descDiv.className = 'build-desc';
     descDiv.textContent = type.description;
 
+    const imageDiv = document.createElement('div');
+    imageDiv.className = 'build-image';
+    if (type.image) {
+      imageDiv.style.backgroundImage = `url(${type.image})`;
+    }
+
     btn.appendChild(nameDiv);
+    btn.appendChild(metaDiv);
     btn.appendChild(costDiv);
     btn.appendChild(descDiv);
+    btn.appendChild(imageDiv);
 
     btn.addEventListener('click', () => {
       game.selectedBuildingTypeId =
@@ -130,7 +188,17 @@ function renderGrid(game: GameState): void {
 
     if (cell.buildingTypeId) {
       const type = BUILDING_TYPES.find((t) => t.id === cell.buildingTypeId);
-      div.textContent = type ? type.shortName : '?';
+      if (type) {
+        div.textContent = cell.isRoot ? type.shortName : '';
+        if (type.image) {
+          div.style.backgroundImage = `url(${type.image})`;
+          div.style.backgroundSize = 'cover';
+          div.style.backgroundPosition = 'center';
+          div.style.backgroundRepeat = 'no-repeat';
+        }
+      } else {
+        div.textContent = '?';
+      }
     } else {
       div.textContent = '';
     }
@@ -169,6 +237,16 @@ function renderPopup(game: GameState): void {
     effects.className = 'popup-option-effects';
     effects.textContent = formatResourceDeltaList(option.effects);
     btn.appendChild(effects);
+
+    if (option.enableBuildings && option.enableBuildings.length) {
+      const unlock = document.createElement('div');
+      unlock.className = 'popup-option-unlocks';
+      const names = option.enableBuildings
+        .map((id) => BUILDING_TYPES.find((b) => b.id === id)?.name || id)
+        .join(', ');
+      unlock.textContent = `Schaltet frei: ${names}`;
+      btn.appendChild(unlock);
+    }
 
     btn.addEventListener('click', () => {
       if (onChooseEventOption) {
