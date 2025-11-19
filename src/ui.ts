@@ -1,6 +1,6 @@
 // src/ui.ts
-import { GameState } from './types';
-import { BUILDING_TYPES, } from './config';
+import { EventOption, GameState, ResourceDelta } from './types';
+import { BUILDING_TYPES } from './config';
 import { placeBuildingAt } from './core';
 
 let resourcesEl: HTMLElement;
@@ -11,7 +11,8 @@ let logEl: HTMLElement;
 let popupEl: HTMLElement;
 let popupTitleEl: HTMLElement;
 let popupMessageEl: HTMLElement;
-let popupOkButton: HTMLButtonElement;
+let popupOptionsEl: HTMLElement;
+let onChooseEventOption: ((option: EventOption) => void) | null = null;
 
 function formatDelta(d: number): string {
   if (!d) return '±0/Tick';
@@ -19,6 +20,16 @@ function formatDelta(d: number): string {
   const abs = Math.abs(d);
   const rounded = abs < 0.1 ? d.toFixed(2) : d.toFixed(1);
   return `${sign}${rounded}/Tick`;
+}
+
+function formatResourceDeltaList(deltas: ResourceDelta[]): string {
+  if (!deltas.length) return 'Keine direkten Änderungen';
+  return deltas
+    .map((d) => {
+      const sign = d.amount > 0 ? '+' : '';
+      return `${sign}${d.amount} ${d.resource}`;
+    })
+    .join(', ');
 }
 
 function renderResources(game: GameState): void {
@@ -136,6 +147,38 @@ function renderPopup(game: GameState): void {
   popupEl.classList.remove('hidden');
   popupTitleEl.textContent = game.activeEventPopup.title;
   popupMessageEl.textContent = game.activeEventPopup.message;
+
+  popupOptionsEl.innerHTML = '';
+  for (const option of game.activeEventPopup.options) {
+    const btn = document.createElement('button');
+    btn.className = 'popup-option';
+
+    const label = document.createElement('div');
+    label.className = 'popup-option-title';
+    label.textContent = option.text;
+    btn.appendChild(label);
+
+    if (option.explanation) {
+      const expl = document.createElement('div');
+      expl.className = 'popup-option-expl';
+      expl.textContent = option.explanation;
+      btn.appendChild(expl);
+    }
+
+    const effects = document.createElement('div');
+    effects.className = 'popup-option-effects';
+    effects.textContent = formatResourceDeltaList(option.effects);
+    btn.appendChild(effects);
+
+    btn.addEventListener('click', () => {
+      if (onChooseEventOption) {
+        onChooseEventOption(option);
+      }
+      renderAll(game);
+    });
+
+    popupOptionsEl.appendChild(btn);
+  }
 }
 
 function renderLog(game: GameState): void {
@@ -161,7 +204,7 @@ export function renderAll(game: GameState): void {
 
 export function initUi(
   game: GameState,
-  onConfirmEvent: () => void,
+  onConfirmEvent: (option: EventOption) => void,
 ): void {
   resourcesEl = document.getElementById('resources')!;
   timeDisplayEl = document.getElementById('time-display')!;
@@ -171,12 +214,8 @@ export function initUi(
   popupEl = document.getElementById('event-popup')!;
   popupTitleEl = document.getElementById('popup-title')!;
   popupMessageEl = document.getElementById('popup-message')!;
-  popupOkButton = document.getElementById('popup-ok-button') as HTMLButtonElement;
-
-  popupOkButton.addEventListener('click', () => {
-    onConfirmEvent();
-    renderAll(game);
-  });
+  popupOptionsEl = document.getElementById('popup-options')!;
+  onChooseEventOption = onConfirmEvent;
 
   // Delegation für Grid-Klicks
   gridEl.addEventListener('click', (event) => {

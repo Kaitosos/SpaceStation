@@ -1,11 +1,11 @@
 // src/main.ts
-import { createInitialGameState, updateGameTick, applyEventEffectsAndClose } from './core';
+import { createInitialGameState, updateGameTick, applyEventOptionAndClose } from './core';
 import { initUi, renderAll } from './ui';
 
 const game = createInitialGameState();
 
-initUi(game, () => {
-  applyEventEffectsAndClose(game);
+initUi(game, (option) => {
+  applyEventOptionAndClose(game, option);
 });
 
 const TICK_MS = 500;

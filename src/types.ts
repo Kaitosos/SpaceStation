@@ -48,7 +48,7 @@ export interface EventConfig {
   message: string;
   once: boolean;
   conditions: ConditionConfig[];
-  effects: ResourceDelta[];
+  options: EventOption[];
 }
 
 export interface GameEventState {
@@ -60,6 +60,13 @@ export interface ActiveEventPopup {
   id: string;
   title: string;
   message: string;
+  options: EventOption[];
+}
+
+export interface EventOption {
+  id: string;
+  text: string;
+  explanation?: string;
   effects: ResourceDelta[];
 }
 
