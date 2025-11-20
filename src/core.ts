@@ -477,11 +477,17 @@ export function updateGameTick(game: GameState): void {
       addResourceChangesToDelta(delta, type.perTick, +1);
     }
 
-    const activeBonus = module.bonusQualifications.filter((code) => {
-      const q = game.qualifications.find((qual) => qual.code === code);
-      return !!q && q.enabled;
-    });
-    for (const _ of activeBonus) {
+    const enabledBonusQualifications = new Set(
+      module.bonusQualifications.filter((code) => {
+        const q = game.qualifications.find((qual) => qual.code === code);
+        return !!q && q.enabled;
+      }),
+    );
+
+    const activeBonusWorkers = activeWorkers.filter((person) =>
+      person.qualifications.some((code) => enabledBonusQualifications.has(code)),
+    );
+    for (const _ of activeBonusWorkers) {
       addResourceChangesToDelta(delta, type.perTick, +1);
     }
   }
