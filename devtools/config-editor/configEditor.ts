@@ -7,11 +7,16 @@ import {
 } from '../../src/config';
 import {
   BuildingType,
+  ConditionConfig,
+  Comparator,
   EventConfig,
+  EventOption,
   Qualification,
   ResourceConfig,
   ResourceDelta,
 } from '../../src/types';
+
+type EditableEventOption = EventOption & { followupEventId?: string };
 
 interface EditorState {
   resources: ResourceConfig[];
@@ -105,6 +110,59 @@ const parseResourceDeltas = (text: string): ResourceDelta[] =>
       return { resource: resource?.trim() ?? '', amount: Number(amount ?? 0) } as ResourceDelta;
     })
     .filter((d) => d.resource.length > 0);
+
+const isComparator = (value: string): value is Comparator =>
+  ['lt', 'lte', 'gt', 'gte', 'eq', 'neq'].includes(value);
+
+const formatCondition = (condition: ConditionConfig): string => JSON.stringify(condition);
+
+const parseConditionLine = (line: string): ConditionConfig | null => {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed) as Partial<ConditionConfig> & { type?: string; comparator?: string };
+    if (
+      parsed.type === 'resource' &&
+      typeof parsed.resource === 'string' &&
+      typeof parsed.comparator === 'string' &&
+      isComparator(parsed.comparator) &&
+      typeof parsed.value === 'number'
+    ) {
+      return {
+        type: 'resource',
+        resource: parsed.resource,
+        comparator: parsed.comparator,
+        value: parsed.value,
+      };
+    }
+    if (
+      parsed.type === 'time' &&
+      (parsed.ticksGte === undefined || typeof parsed.ticksGte === 'number') &&
+      (parsed.daysGte === undefined || typeof parsed.daysGte === 'number')
+    ) {
+      return { type: 'time', ticksGte: parsed.ticksGte, daysGte: parsed.daysGte };
+    }
+  } catch (e) {
+    // Fall through to legacy parsing
+  }
+
+  const legacyParts = trimmed.split(':');
+  if (legacyParts.length === 3) {
+    const [resource, comparator, value] = legacyParts;
+    const comparatorTrimmed = comparator.trim();
+    if (isComparator(comparatorTrimmed)) {
+      return {
+        type: 'resource',
+        resource: resource.trim(),
+        comparator: comparatorTrimmed,
+        value: Number(value.trim() || 0),
+      };
+    }
+  }
+
+  return null;
+};
 
 const addSubheading = (container: HTMLElement, title: string): void => {
   const h = document.createElement('h3');
@@ -212,7 +270,7 @@ const createBuildingCard = (building: BuildingType, container: HTMLElement): voi
   card.appendChild(
     field(
       'Benötigte Qualifikationen (code, Komma-getrennt)',
-      createTextInput(building.requiredQualifications.join(', '), (v) => {
+      createTextInput((building.requiredQualifications ?? []).join(', '), (v) => {
         building.requiredQualifications = v
           .split(',')
           .map((s) => s.trim())
@@ -223,7 +281,7 @@ const createBuildingCard = (building: BuildingType, container: HTMLElement): voi
   card.appendChild(
     field(
       'Bonus-Qualifikationen (code, Komma-getrennt)',
-      createTextInput(building.bonusQualifications.join(', '), (v) => {
+      createTextInput((building.bonusQualifications ?? []).join(', '), (v) => {
         building.bonusQualifications = v
           .split(',')
           .map((s) => s.trim())
@@ -283,29 +341,36 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
   );
   card.appendChild(field('Einmalig?', createCheckbox(Boolean(event.once), (v) => (event.once = v))));
 
-  addSubheading(card, 'Bedingungen (code:wert pro Zeile)');
+  addSubheading(card, 'Bedingungen (JSON pro Zeile, z.B. {"type":"resource","resource":"oxygen","comparator":"lte","value":20})');
   const conditionArea = document.createElement('textarea');
-  conditionArea.value = event.conditions
-    .map((cond) => `${cond.resource || cond.qualification || cond.flag || 'code'}:${cond.threshold || 0}`)
-    .join('\n');
+  conditionArea.value = event.conditions.map(formatCondition).join('\n');
   conditionArea.addEventListener('input', () => {
     event.conditions = conditionArea.value
       .split(/\n+/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [code, threshold] = line.split(':');
-        return { resource: code, threshold: Number(threshold || 0) };
-      });
+      .map(parseConditionLine)
+      .filter((cond): cond is ConditionConfig => Boolean(cond));
   });
   card.appendChild(conditionArea);
 
   addSubheading(card, 'Optionen');
-  event.options.forEach((option, idx) => {
+  (event.options as EditableEventOption[]).forEach((option, idx) => {
     const optWrap = document.createElement('div');
     optWrap.className = 'devcfg-card';
 
-    optWrap.appendChild(field('Label', createTextInput(option.label, (v) => (option.label = v))));
+    optWrap.appendChild(field('ID', createTextInput(option.id, (v) => (option.id = v))));
+    optWrap.appendChild(field('Text', createTextInput(option.text, (v) => (option.text = v))));
+    optWrap.appendChild(
+      field(
+        'Erklärung',
+        (() => {
+          const area = document.createElement('textarea');
+          area.value = option.explanation ?? '';
+          area.addEventListener('input', () => (option.explanation = area.value || undefined));
+          return area;
+        })(),
+        'Optional',
+      ),
+    );
     optWrap.appendChild(
       field(
         'Effekte',
@@ -333,13 +398,20 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
     });
     optWrap.appendChild(deleteBtn);
 
-    card.appendChild(optWrap);
+  card.appendChild(optWrap);
   });
 
   const addOpt = document.createElement('button');
   addOpt.textContent = 'Option hinzufügen';
   addOpt.addEventListener('click', () => {
-    event.options.push({ label: 'Neue Option', effects: [], followupEventId: undefined });
+    const newOption: EditableEventOption = {
+      id: `${event.id}_option_${event.options.length + 1}`,
+      text: 'Neue Option',
+      explanation: '',
+      effects: [],
+      followupEventId: undefined,
+    };
+    (event.options as EditableEventOption[]).push(newOption);
     renderConfigEditor();
   });
   card.appendChild(addOpt);
