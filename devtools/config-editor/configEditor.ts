@@ -7,16 +7,15 @@ import {
 } from '../../src/config';
 import {
   BuildingType,
-  ConditionConfig,
   Comparator,
+  ConditionConfig,
   EventConfig,
-  EventOption,
   Qualification,
   ResourceConfig,
   ResourceDelta,
+  ResourceConditionConfig,
+  TimeConditionConfig,
 } from '../../src/types';
-
-type EditableEventOption = EventOption & { followupEventId?: string };
 
 interface EditorState {
   resources: ResourceConfig[];
@@ -24,6 +23,8 @@ interface EditorState {
   qualifications: Qualification[];
   events: EventConfig[];
 }
+
+type TabKey = 'resources' | 'buildings' | 'qualifications' | 'events';
 
 const isDevEnvironment = (): boolean => {
   const host = window.location.hostname;
@@ -38,6 +39,15 @@ const cloneState = (): EditorState => ({
 });
 
 const state: EditorState = cloneState();
+
+const selection: Record<TabKey, number> = {
+  resources: 0,
+  buildings: 0,
+  qualifications: 0,
+  events: 0,
+};
+
+let activeTab: TabKey = 'resources';
 
 const field = (
   label: string,
@@ -110,59 +120,6 @@ const parseResourceDeltas = (text: string): ResourceDelta[] =>
       return { resource: resource?.trim() ?? '', amount: Number(amount ?? 0) } as ResourceDelta;
     })
     .filter((d) => d.resource.length > 0);
-
-const isComparator = (value: string): value is Comparator =>
-  ['lt', 'lte', 'gt', 'gte', 'eq', 'neq'].includes(value);
-
-const formatCondition = (condition: ConditionConfig): string => JSON.stringify(condition);
-
-const parseConditionLine = (line: string): ConditionConfig | null => {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
-
-  try {
-    const parsed = JSON.parse(trimmed) as Partial<ConditionConfig> & { type?: string; comparator?: string };
-    if (
-      parsed.type === 'resource' &&
-      typeof parsed.resource === 'string' &&
-      typeof parsed.comparator === 'string' &&
-      isComparator(parsed.comparator) &&
-      typeof parsed.value === 'number'
-    ) {
-      return {
-        type: 'resource',
-        resource: parsed.resource,
-        comparator: parsed.comparator,
-        value: parsed.value,
-      };
-    }
-    if (
-      parsed.type === 'time' &&
-      (parsed.ticksGte === undefined || typeof parsed.ticksGte === 'number') &&
-      (parsed.daysGte === undefined || typeof parsed.daysGte === 'number')
-    ) {
-      return { type: 'time', ticksGte: parsed.ticksGte, daysGte: parsed.daysGte };
-    }
-  } catch (e) {
-    // Fall through to legacy parsing
-  }
-
-  const legacyParts = trimmed.split(':');
-  if (legacyParts.length === 3) {
-    const [resource, comparator, value] = legacyParts;
-    const comparatorTrimmed = comparator.trim();
-    if (isComparator(comparatorTrimmed)) {
-      return {
-        type: 'resource',
-        resource: resource.trim(),
-        comparator: comparatorTrimmed,
-        value: Number(value.trim() || 0),
-      };
-    }
-  }
-
-  return null;
-};
 
 const addSubheading = (container: HTMLElement, title: string): void => {
   const h = document.createElement('h3');
@@ -271,10 +228,11 @@ const createBuildingCard = (building: BuildingType, container: HTMLElement): voi
     field(
       'Benötigte Qualifikationen (code, Komma-getrennt)',
       createTextInput((building.requiredQualifications ?? []).join(', '), (v) => {
-        building.requiredQualifications = v
+        const list = v
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
+        building.requiredQualifications = list;
       }),
     ),
   );
@@ -282,10 +240,11 @@ const createBuildingCard = (building: BuildingType, container: HTMLElement): voi
     field(
       'Bonus-Qualifikationen (code, Komma-getrennt)',
       createTextInput((building.bonusQualifications ?? []).join(', '), (v) => {
-        building.bonusQualifications = v
+        const list = v
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
+        building.bonusQualifications = list;
       }),
     ),
   );
@@ -341,34 +300,72 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
   );
   card.appendChild(field('Einmalig?', createCheckbox(Boolean(event.once), (v) => (event.once = v))));
 
-  addSubheading(card, 'Bedingungen (JSON pro Zeile, z.B. {"type":"resource","resource":"oxygen","comparator":"lte","value":20})');
+  addSubheading(card, 'Bedingungen (pro Zeile z. B. resource:oxygen,lte,20 oder time:ticksGte=60)');
   const conditionArea = document.createElement('textarea');
-  conditionArea.value = event.conditions.map(formatCondition).join('\n');
+  conditionArea.value = event.conditions
+    .map((cond) => {
+      if (cond.type === 'resource') {
+        return `resource:${cond.resource},${cond.comparator},${cond.value}`;
+      }
+      const parts = [] as string[];
+      if (cond.ticksGte !== undefined) parts.push(`ticksGte=${cond.ticksGte}`);
+      if (cond.daysGte !== undefined) parts.push(`daysGte=${cond.daysGte}`);
+      return `time:${parts.join(',') || 'ticksGte=0'}`;
+    })
+    .join('\n');
   conditionArea.addEventListener('input', () => {
-    event.conditions = conditionArea.value
+    const parsed: ConditionConfig[] = conditionArea.value
       .split(/\n+/)
-      .map(parseConditionLine)
-      .filter((cond): cond is ConditionConfig => Boolean(cond));
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [kind, rest] = line.split(':');
+        if (kind === 'time') {
+          const cond: TimeConditionConfig = { type: 'time' };
+          (rest || '')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+            .forEach((entry) => {
+              const [k, v] = entry.split('=');
+              const num = Number(v ?? '0');
+              if (k === 'ticksGte') cond.ticksGte = num;
+              if (k === 'daysGte') cond.daysGte = num;
+            });
+          return cond;
+        }
+        const [resource, comparator, value] = (rest || '').split(',').map((s) => s.trim());
+        const cmp: Comparator = ['lt', 'lte', 'gt', 'gte', 'eq', 'neq'].includes(comparator as Comparator)
+          ? (comparator as Comparator)
+          : 'gte';
+        const cond: ResourceConditionConfig = {
+          type: 'resource',
+          resource: resource || 'resource',
+          comparator: cmp,
+          value: Number(value || 0),
+        };
+        return cond;
+      });
+    event.conditions = parsed;
   });
   card.appendChild(conditionArea);
 
   addSubheading(card, 'Optionen');
-  (event.options as EditableEventOption[]).forEach((option, idx) => {
+  event.options.forEach((option, idx) => {
     const optWrap = document.createElement('div');
     optWrap.className = 'devcfg-card';
 
-    optWrap.appendChild(field('ID', createTextInput(option.id, (v) => (option.id = v))));
+    optWrap.appendChild(field('Option-ID', createTextInput(option.id, (v) => (option.id = v))));
     optWrap.appendChild(field('Text', createTextInput(option.text, (v) => (option.text = v))));
     optWrap.appendChild(
       field(
-        'Erklärung',
+        'Erklärung (optional)',
         (() => {
           const area = document.createElement('textarea');
           area.value = option.explanation ?? '';
           area.addEventListener('input', () => (option.explanation = area.value || undefined));
           return area;
         })(),
-        'Optional',
       ),
     );
     optWrap.appendChild(
@@ -384,8 +381,27 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
     );
     optWrap.appendChild(
       field(
-        'Folge-Event-ID',
-        createTextInput(option.followupEventId ?? '', (v) => (option.followupEventId = v || undefined)),
+        'Gebäude freischalten (ID, Komma-getrennt)',
+        createTextInput((option.enableBuildings ?? []).join(', '), (v) => {
+          const ids = v
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          option.enableBuildings = ids.length ? ids : undefined;
+        }),
+        'Optional',
+      ),
+    );
+    optWrap.appendChild(
+      field(
+        'Qualifikationen freischalten (Code, Komma-getrennt)',
+        createTextInput((option.enableQualifications ?? []).join(', '), (v) => {
+          const ids = v
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          option.enableQualifications = ids.length ? ids : undefined;
+        }),
         'Optional',
       ),
     );
@@ -398,20 +414,21 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
     });
     optWrap.appendChild(deleteBtn);
 
-  card.appendChild(optWrap);
+    card.appendChild(optWrap);
   });
-
+  
   const addOpt = document.createElement('button');
   addOpt.textContent = 'Option hinzufügen';
   addOpt.addEventListener('click', () => {
-    const newOption: EditableEventOption = {
-      id: `${event.id}_option_${event.options.length + 1}`,
+    const nextIndex = event.options.length + 1;
+    event.options.push({
+      id: `option_${nextIndex}`,
       text: 'Neue Option',
-      explanation: '',
+      explanation: undefined,
       effects: [],
-      followupEventId: undefined,
-    };
-    (event.options as EditableEventOption[]).push(newOption);
+      enableBuildings: undefined,
+      enableQualifications: undefined,
+    });
     renderConfigEditor();
   });
   card.appendChild(addOpt);
@@ -419,35 +436,68 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
   container.appendChild(card);
 };
 
-const renderSection = (
-  container: HTMLElement,
-  title: string,
-  renderList: (list: HTMLElement) => void,
-  onAdd: () => void,
-): void => {
-  const section = document.createElement('section');
-  section.className = 'devcfg-section';
+const newResource = (): ResourceConfig => ({
+  name: 'neue_ressource',
+  hasMax: false,
+  initialCurrent: 0,
+  initialMax: 0,
+  enabledByDefault: true,
+});
 
-  const header = document.createElement('div');
-  header.className = 'devcfg-header';
+const newBuilding = (): BuildingType => ({
+  id: 'neues_gebaeude',
+  name: 'Neues Gebäude',
+  shortName: 'Neu',
+  description: 'Beschreibung',
+  type: 'misc',
+  enabled: true,
+  activeByDefault: false,
+  workerMax: 0,
+  size: { width: 1, height: 1 },
+  cost: [],
+  perTick: [],
+  maxBonus: [],
+  requiredQualifications: [],
+  bonusQualifications: [],
+});
 
-  const h = document.createElement('h2');
-  h.textContent = title;
-  header.appendChild(h);
+const newQualification = (): Qualification => ({
+  code: 'neu_qual',
+  title: 'Neue Qualifikation',
+  costs: [],
+  enabled: true,
+  learningDuration: 1,
+});
 
-  const addBtn = document.createElement('button');
-  addBtn.textContent = `${title} hinzufügen`;
-  addBtn.addEventListener('click', onAdd);
-  header.appendChild(addBtn);
+const newEvent = (): EventConfig => ({
+  id: 'neues_event',
+  title: 'Neues Event',
+  message: 'Beschreibung des Events',
+  once: false,
+  conditions: [],
+  options: [
+    {
+      id: 'option_1',
+      text: 'Option 1',
+      effects: [],
+    },
+  ],
+});
 
-  section.appendChild(header);
+const ensureSelectionInRange = (): void => {
+  const clamp = (key: TabKey, listLength: number): void => {
+    if (listLength === 0) {
+      selection[key] = 0;
+      return;
+    }
+    selection[key] = Math.min(selection[key], listLength - 1);
+    selection[key] = Math.max(selection[key], 0);
+  };
 
-  const list = document.createElement('div');
-  list.className = 'devcfg-list';
-  renderList(list);
-  section.appendChild(list);
-
-  container.appendChild(section);
+  clamp('resources', state.resources.length);
+  clamp('buildings', state.buildings.length);
+  clamp('qualifications', state.qualifications.length);
+  clamp('events', state.events.length);
 };
 
 const generateConfigTs = (): string => {
@@ -472,6 +522,8 @@ const downloadConfig = (): void => {
 const renderConfigEditor = (): void => {
   const existing = document.getElementById('dev-config-editor');
   if (existing) existing.remove();
+
+  ensureSelectionInRange();
 
   const overlay = document.createElement('div');
   overlay.id = 'dev-config-editor';
@@ -504,90 +556,136 @@ const renderConfigEditor = (): void => {
   const content = document.createElement('div');
   content.className = 'devcfg-content';
 
-  renderSection(
-    content,
-    'Ressourcen',
-    (list) => {
-      list.replaceChildren();
-      state.resources.forEach((cfg) => createResourceCard(cfg, list));
-    },
-    () => {
-      state.resources.push({
-        name: 'neue_ressource',
-        hasMax: false,
-        initialCurrent: 0,
-        enabledByDefault: true,
-      });
-      renderConfigEditor();
-    },
-  );
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'resources', label: 'Ressourcen' },
+    { key: 'buildings', label: 'Gebäude' },
+    { key: 'qualifications', label: 'Qualifikationen' },
+    { key: 'events', label: 'Events' },
+  ];
 
-  renderSection(
-    content,
-    'Gebäude',
-    (list) => {
-      list.replaceChildren();
-      state.buildings.forEach((cfg) => createBuildingCard(cfg, list));
-    },
-    () => {
-      state.buildings.push({
-        id: 'new_building',
-        name: 'Neues Gebäude',
-        shortName: 'N',
-        description: '',
-        type: 'allgemein',
-        size: { width: 1, height: 1 },
-        enabled: true,
-        cost: [],
-        perTick: [],
-        maxBonus: [],
-        requiredQualifications: [],
-        bonusQualifications: [],
-        workerMax: 0,
-      });
+  const tabNav = document.createElement('div');
+  tabNav.className = 'devcfg-tabs';
+  tabs.forEach((tab) => {
+    const btn = document.createElement('button');
+    btn.textContent = tab.label;
+    btn.className = `devcfg-tab ${activeTab === tab.key ? 'active' : ''}`;
+    btn.addEventListener('click', () => {
+      activeTab = tab.key;
       renderConfigEditor();
-    },
-  );
+    });
+    tabNav.appendChild(btn);
+  });
 
-  renderSection(
-    content,
-    'Qualifikationen',
-    (list) => {
-      list.replaceChildren();
-      state.qualifications.forEach((cfg) => createQualificationCard(cfg, list));
-    },
-    () => {
-      state.qualifications.push({
-        code: 'new_qualification',
-        title: 'Neue Qualifikation',
-        enabled: true,
-        costs: [],
-        learningDuration: 0,
-      });
+  const tabContent = document.createElement('div');
+  tabContent.className = 'devcfg-tab-content';
+
+  const renderListWithDetails = <T,>(
+    items: T[],
+    key: TabKey,
+    labelSelector: (item: T, index: number) => string,
+    add: () => void,
+    renderCard: (item: T, container: HTMLElement) => void,
+  ): void => {
+    const panel = document.createElement('div');
+    panel.className = 'devcfg-tab-panel';
+
+    const list = document.createElement('div');
+    list.className = 'devcfg-tab-list';
+
+    const listHeader = document.createElement('div');
+    listHeader.className = 'devcfg-tab-list-header';
+    const listTitle = document.createElement('span');
+    listTitle.textContent = `${items.length} Einträge`;
+    listHeader.appendChild(listTitle);
+
+    const addBtn = document.createElement('button');
+    addBtn.textContent = 'Neu erstellen';
+    addBtn.addEventListener('click', () => {
+      add();
+      selection[key] = items.length - 1;
       renderConfigEditor();
-    },
-  );
+    });
+    listHeader.appendChild(addBtn);
 
-  renderSection(
-    content,
-    'Events',
-    (list) => {
-      list.replaceChildren();
-      state.events.forEach((cfg) => createEventCard(cfg, list));
-    },
-    () => {
-      state.events.push({
-        id: 'new_event',
-        title: 'Neues Event',
-        message: '',
-        once: false,
-        conditions: [],
-        options: [],
+    list.appendChild(listHeader);
+
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'devcfg-empty';
+      empty.textContent = 'Keine Einträge vorhanden.';
+      list.appendChild(empty);
+    }
+
+    items.forEach((item, idx) => {
+      const entry = document.createElement('button');
+      entry.className = `devcfg-list-item ${selection[key] === idx ? 'active' : ''}`;
+      entry.textContent = labelSelector(item, idx);
+      entry.addEventListener('click', () => {
+        selection[key] = idx;
+        renderConfigEditor();
       });
-      renderConfigEditor();
-    },
-  );
+      list.appendChild(entry);
+    });
 
+    const detail = document.createElement('div');
+    detail.className = 'devcfg-tab-detail';
+
+    if (items.length > 0) {
+      const selected = items[selection[key]];
+      renderCard(selected, detail);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'devcfg-card';
+      empty.textContent = 'Füge einen Eintrag hinzu, um Details zu bearbeiten.';
+      detail.appendChild(empty);
+    }
+
+    panel.appendChild(list);
+    panel.appendChild(detail);
+    tabContent.appendChild(panel);
+  };
+
+  switch (activeTab) {
+    case 'resources':
+      renderListWithDetails<ResourceConfig>(
+        state.resources,
+        'resources',
+        (item, idx) => item.name || `Ressource ${idx + 1}`,
+        () => state.resources.push(newResource()),
+        (item, container) => createResourceCard(item, container),
+      );
+      break;
+    case 'buildings':
+      renderListWithDetails<BuildingType>(
+        state.buildings,
+        'buildings',
+        (item, idx) => item.name || `Gebäude ${idx + 1}`,
+        () => state.buildings.push(newBuilding()),
+        (item, container) => createBuildingCard(item, container),
+      );
+      break;
+    case 'qualifications':
+      renderListWithDetails<Qualification>(
+        state.qualifications,
+        'qualifications',
+        (item, idx) => item.title || `Qualifikation ${idx + 1}`,
+        () => state.qualifications.push(newQualification()),
+        (item, container) => createQualificationCard(item, container),
+      );
+      break;
+    case 'events':
+      renderListWithDetails<EventConfig>(
+        state.events,
+        'events',
+        (item, idx) => item.title || `Event ${idx + 1}`,
+        () => state.events.push(newEvent()),
+        (item, container) => createEventCard(item, container),
+      );
+      break;
+  }
+
+  content.appendChild(tabNav);
+  content.appendChild(tabContent);
   overlay.appendChild(content);
 
   const close = document.createElement('button');
@@ -683,6 +781,95 @@ const ensureStyles = (): void => {
     #devcfg-close:hover { background: rgba(255, 255, 255, 0.06); }
 
     .devcfg-content { display: grid; gap: 16px; }
+
+    .devcfg-tabs { display: grid; grid-auto-flow: column; gap: 8px; width: fit-content; }
+
+    .devcfg-tab {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--devcfg-border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--devcfg-text);
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+
+    .devcfg-tab.active {
+      background: var(--devcfg-accent);
+      border-color: var(--devcfg-accent);
+      color: #fff;
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+    }
+
+    .devcfg-tab-content { display: grid; }
+
+    .devcfg-tab-panel {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .devcfg-tab-list {
+      border: 1px solid var(--devcfg-border);
+      border-radius: 14px;
+      background: var(--devcfg-surface);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .devcfg-tab-list-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 700;
+      color: var(--devcfg-text);
+    }
+
+    .devcfg-tab-list-header button {
+      border: 1px solid var(--devcfg-border);
+      background: var(--devcfg-accent);
+      color: #fff;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 120ms ease, transform 120ms ease;
+    }
+
+    .devcfg-tab-list-header button:hover { background: var(--devcfg-accent-strong); transform: translateY(-1px); }
+
+    .devcfg-list-item {
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--devcfg-border);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--devcfg-text);
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+
+    .devcfg-list-item:hover { background: rgba(255, 255, 255, 0.05); }
+
+    .devcfg-list-item.active {
+      border-color: var(--devcfg-accent);
+      background: rgba(37, 99, 235, 0.12);
+      color: #fff;
+    }
+
+    .devcfg-tab-detail { display: grid; gap: 12px; }
+
+    .devcfg-empty {
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px dashed var(--devcfg-border);
+      color: var(--devcfg-text-muted);
+      font-style: italic;
+    }
 
     .devcfg-section {
       padding: 16px;
