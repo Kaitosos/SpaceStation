@@ -1,5 +1,5 @@
 // src/config.ts
-import { ResourceConfig, BuildingType, EventConfig } from './types';
+import { ResourceConfig, BuildingType, EventConfig, Qualification } from './types';
 
 export const RESOURCE_CONFIGS: ResourceConfig[] = [
   {
@@ -45,6 +45,10 @@ export const BUILDING_TYPES: BuildingType[] = [
     cost: [{ resource: 'money', amount: 200 }],
     perTick: [{ resource: 'energy', amount: 12 }],
     maxBonus: [],
+    requiredQualifications: ['tech_basic'],
+    bonusQualifications: ['energy_specialist'],
+    workerMax: 2,
+    activeByDefault: true,
   },
   {
     id: 'life_support',
@@ -62,6 +66,10 @@ export const BUILDING_TYPES: BuildingType[] = [
       { resource: 'oxygen', amount: 15 },
     ],
     maxBonus: [],
+    requiredQualifications: ['life_support_cert'],
+    bonusQualifications: ['medic'],
+    workerMax: 2,
+    activeByDefault: true,
   },
   {
     id: 'habitat',
@@ -76,6 +84,10 @@ export const BUILDING_TYPES: BuildingType[] = [
     cost: [{ resource: 'money', amount: 250 }],
     perTick: [{ resource: 'energy', amount: -3 }],
     maxBonus: [{ resource: 'population', amount: 5 }],
+    requiredQualifications: [],
+    bonusQualifications: [],
+    workerMax: 1,
+    activeByDefault: false,
   },
   {
     id: 'energy_storage',
@@ -90,6 +102,10 @@ export const BUILDING_TYPES: BuildingType[] = [
     cost: [{ resource: 'money', amount: 300 }],
     perTick: [],
     maxBonus: [{ resource: 'energy', amount: 50 }],
+    requiredQualifications: ['tech_basic'],
+    bonusQualifications: [],
+    workerMax: 1,
+    activeByDefault: false,
   },
   {
     id: 'oxygen_storage',
@@ -104,6 +120,10 @@ export const BUILDING_TYPES: BuildingType[] = [
     cost: [{ resource: 'money', amount: 300 }],
     perTick: [],
     maxBonus: [{ resource: 'oxygen', amount: 50 }],
+    requiredQualifications: ['life_support_cert'],
+    bonusQualifications: [],
+    workerMax: 1,
+    activeByDefault: false,
   },
   {
     id: 'dock',
@@ -118,6 +138,10 @@ export const BUILDING_TYPES: BuildingType[] = [
     cost: [{ resource: 'money', amount: 400 }],
     perTick: [{ resource: 'money', amount: 2 }],
     maxBonus: [],
+    requiredQualifications: ['dock_ops'],
+    bonusQualifications: ['logistics'],
+    workerMax: 2,
+    activeByDefault: true,
   },
   {
     id: 'science_lab',
@@ -132,6 +156,75 @@ export const BUILDING_TYPES: BuildingType[] = [
     cost: [{ resource: 'money', amount: 800 }],
     perTick: [{ resource: 'energy', amount: -10 }],
     maxBonus: [],
+    requiredQualifications: ['science_basic'],
+    bonusQualifications: ['science_advanced'],
+    workerMax: 3,
+    activeByDefault: true,
+  },
+];
+
+export const QUALIFICATION_CONFIGS: Qualification[] = [
+  {
+    code: 'tech_basic',
+    title: 'Techniker',
+    enabled: true,
+    costs: [{ resource: 'money', amount: 80 }],
+    learningDuration: 12,
+  },
+  {
+    code: 'energy_specialist',
+    title: 'Energie-Spezialist',
+    enabled: false,
+    costs: [
+      { resource: 'money', amount: 150 },
+      { resource: 'energy', amount: 10 },
+    ],
+    learningDuration: 20,
+  },
+  {
+    code: 'life_support_cert',
+    title: 'Lebenserhaltung',
+    enabled: true,
+    costs: [{ resource: 'money', amount: 90 }],
+    learningDuration: 14,
+  },
+  {
+    code: 'medic',
+    title: 'Sanitäter',
+    enabled: false,
+    costs: [{ resource: 'money', amount: 120 }],
+    learningDuration: 18,
+  },
+  {
+    code: 'dock_ops',
+    title: 'Dock-Operator',
+    enabled: true,
+    costs: [{ resource: 'money', amount: 70 }],
+    learningDuration: 10,
+  },
+  {
+    code: 'logistics',
+    title: 'Logistikprofi',
+    enabled: false,
+    costs: [{ resource: 'money', amount: 140 }],
+    learningDuration: 16,
+  },
+  {
+    code: 'science_basic',
+    title: 'Forscher',
+    enabled: false,
+    costs: [{ resource: 'money', amount: 200 }],
+    learningDuration: 24,
+  },
+  {
+    code: 'science_advanced',
+    title: 'Senior-Forscher',
+    enabled: false,
+    costs: [
+      { resource: 'money', amount: 260 },
+      { resource: 'energy', amount: 12 },
+    ],
+    learningDuration: 32,
   },
 ];
 

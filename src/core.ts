@@ -12,12 +12,25 @@ import {
   EventConfig,
   EventOption,
   Cell,
+  ModuleState,
+  Qualification,
 } from './types';
-import { RESOURCE_CONFIGS, BUILDING_TYPES, EVENT_CONFIGS } from './config';
+import {
+  RESOURCE_CONFIGS,
+  BUILDING_TYPES,
+  EVENT_CONFIGS,
+  QUALIFICATION_CONFIGS,
+} from './config';
 
 export const BUILDING_TYPE_MAP = new Map(
   BUILDING_TYPES.map((t) => [t.id, t]),
 );
+
+let moduleIdCounter = 1;
+
+function nextModuleId(): string {
+  return 'm_' + String(moduleIdCounter++).padStart(3, '0');
+}
 
 function randomFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -37,11 +50,15 @@ export function createInitialResources(): ResourcesState {
   return res;
 }
 
+export function createInitialQualifications(): Qualification[] {
+  return QUALIFICATION_CONFIGS.map((q) => ({ ...q, costs: q.costs.map((c) => ({ ...c })) }));
+}
+
 export function createGrid(width: number, height: number): Grid {
   const cells: Cell[] = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      cells.push({ x, y, buildingTypeId: null });
+      cells.push({ x, y, buildingTypeId: null, moduleId: null });
     }
   }
   return { width, height, cells };
@@ -52,6 +69,10 @@ export function createRandomPerson(index: number): Person {
   const lastNames = ['Vega', 'Ishikawa', 'Black', 'Kwon', 'Nyx', 'Ortiz', 'Kade', 'Flux'];
   const id = 'p_' + String(index + 1).padStart(3, '0');
 
+  const startingQualifications = QUALIFICATION_CONFIGS.filter((q) => q.enabled).map((q) => q.code);
+  const randomQual = randomFrom(startingQualifications);
+  const qualifications = Array.from(new Set([randomQual]));
+
   return {
     id,
     name: `${randomFrom(firstNames)} ${randomFrom(lastNames)}`,
@@ -61,6 +82,12 @@ export function createRandomPerson(index: number): Person {
       { resource: 'oxygen', amount: 0.2 },
       { resource: 'energy', amount: 0.1 },
     ],
+    work: null,
+    equipment: [],
+    unavailableFor: 0,
+    qualifications,
+    faceImage: undefined,
+    bodyImage: undefined,
   };
 }
 
@@ -81,6 +108,7 @@ export function createInitialEvents(): GameEventState[] {
 
 export function createInitialGameState(): GameState {
   const resources = createInitialResources();
+  const qualifications = createInitialQualifications();
   const people = createInitialPeople();
   const grid = createGrid(16, 10);
   const events = createInitialEvents();
@@ -93,10 +121,14 @@ export function createInitialGameState(): GameState {
   return {
     resources,
     people,
+    qualifications,
     grid,
+    modules: [],
     events,
     activeEventPopup: null,
     selectedBuildingTypeId: null,
+    selectedModuleId: null,
+    screen: 'build',
     ticks: 0,
     days: 0,
     messages: [],
@@ -216,6 +248,16 @@ export function applyEventOptionAndClose(
     }
   }
 
+  if (option.enableQualifications && option.enableQualifications.length) {
+    for (const code of option.enableQualifications) {
+      const qual = game.qualifications.find((q) => q.code === code);
+      if (qual && !qual.enabled) {
+        qual.enabled = true;
+        game.messages.push('Neue Qualifikation verfügbar: ' + qual.title);
+      }
+    }
+  }
+
   const evt = game.events.find((e) => e.config.id === popup.id);
   if (evt) {
     evt.hasTriggered = true;
@@ -250,6 +292,23 @@ function getCellsForArea(
     }
   }
   return cells;
+}
+
+function createModuleState(typeId: string, x: number, y: number, width: number, height: number): ModuleState {
+  const type = BUILDING_TYPE_MAP.get(typeId);
+  return {
+    id: nextModuleId(),
+    typeId,
+    x,
+    y,
+    width,
+    height,
+    active: type?.activeByDefault ?? true,
+    requiredQualifications: type?.requiredQualifications ? [...type.requiredQualifications] : [],
+    bonusQualifications: type?.bonusQualifications ? [...type.bonusQualifications] : [],
+    workers: [],
+    workerMax: type?.workerMax ?? 0,
+  };
 }
 
 export function placeBuildingAt(game: GameState, x: number, y: number): void {
@@ -288,11 +347,72 @@ export function placeBuildingAt(game: GameState, x: number, y: number): void {
   }
 
   applyResourceDeltas(game.resources, type.cost, -1);
+  const module = createModuleState(type.id, x, y, size.width, size.height);
+  game.modules.push(module);
   cells.forEach((c, idx) => {
     c.buildingTypeId = type.id;
     c.isRoot = idx === 0;
+    c.moduleId = module.id;
   });
   game.messages.push('Gebaut: ' + type.name);
+}
+
+function hasRequiredQualifications(person: Person, module: ModuleState): boolean {
+  if (!module.requiredQualifications.length) return true;
+  return module.requiredQualifications.every((req) => person.qualifications.includes(req));
+}
+
+function getModuleById(game: GameState, moduleId: string): ModuleState | undefined {
+  return game.modules.find((m) => m.id === moduleId);
+}
+
+export function removePersonFromModule(game: GameState, personId: string, moduleId?: string): void {
+  const person = game.people.find((p) => p.id === personId);
+  if (!person) return;
+  const mod = moduleId ? getModuleById(game, moduleId) : getModuleById(game, person.work || '');
+  if (!mod) {
+    person.work = null;
+    return;
+  }
+  mod.workers = mod.workers.filter((id) => id !== personId);
+  person.work = null;
+}
+
+export function assignPersonToModule(game: GameState, personId: string, moduleId: string): string | null {
+  const person = game.people.find((p) => p.id === personId);
+  const module = getModuleById(game, moduleId);
+  if (!person || !module) return 'Unbekannte Zuordnung';
+
+  if (person.unavailableFor > 0) {
+    return `${person.name} ist noch ${person.unavailableFor} Ticks verhindert.`;
+  }
+
+  if (!hasRequiredQualifications(person, module)) {
+    return `${person.name} erfüllt nicht alle Anforderungen.`;
+  }
+
+  if (module.workerMax > 0 && module.workers.length >= module.workerMax) {
+    return 'Alle Slots sind belegt.';
+  }
+
+  if (person.work && person.work !== module.id) {
+    removePersonFromModule(game, person.id, person.work);
+  }
+
+  if (!module.workers.includes(person.id)) {
+    module.workers.push(person.id);
+  }
+  person.work = module.id;
+  game.selectedModuleId = module.id;
+  game.messages.push(`${person.name} arbeitet nun in ${BUILDING_TYPE_MAP.get(module.typeId)?.name || module.typeId}.`);
+  return null;
+}
+
+export function toggleModuleActive(game: GameState, moduleId: string): void {
+  const mod = getModuleById(game, moduleId);
+  if (!mod) return;
+  mod.active = !mod.active;
+  game.messages.push(`${BUILDING_TYPE_MAP.get(mod.typeId)?.name || mod.typeId} ist jetzt ${mod.active ? 'aktiv' : 'passiv'}.`);
 }
 
 // ---------- Bevölkerung & Tick ----------
@@ -304,10 +424,7 @@ export function trySpawnNewPerson(game: GameState): void {
   const maxPop = popRes.max;
   if (game.people.length >= maxPop) return;
 
-  let dockCount = 0;
-  for (const cell of game.grid.cells) {
-    if (cell.buildingTypeId === 'dock' && cell.isRoot) dockCount++;
-  }
+  const dockCount = game.modules.filter((m) => m.typeId === 'dock').length;
   if (dockCount <= 0) return;
 
   const spawnRatePerTick = 0.02 * dockCount;
@@ -332,13 +449,47 @@ export function updateGameTick(game: GameState): void {
     maxBonus[name] = 0;
   }
 
-  // Gebäude-Effekte
-  for (const cell of game.grid.cells) {
-    if (!cell.buildingTypeId || !cell.isRoot) continue;
-    const type = BUILDING_TYPE_MAP.get(cell.buildingTypeId);
+  for (const person of game.people) {
+    if (person.unavailableFor > 0) {
+      person.unavailableFor--;
+    }
+  }
+
+  // Modul-Effekte
+  for (const module of game.modules) {
+    const type = BUILDING_TYPE_MAP.get(module.typeId);
     if (!type) continue;
+
+    // Basisproduktion (auch wenn nicht aktiv)
     addResourceChangesToDelta(delta, type.perTick, +1);
     addResourceChangesToDelta(maxBonus, type.maxBonus, +1);
+
+    if (!module.active) continue;
+
+    const activeWorkers = module.workers
+      .map((id) => game.people.find((p) => p.id === id))
+      .filter(
+        (p): p is Person =>
+          !!p && p.work === module.id && p.unavailableFor <= 0 && hasRequiredQualifications(p, module),
+      );
+
+    for (const _ of activeWorkers) {
+      addResourceChangesToDelta(delta, type.perTick, +1);
+    }
+
+    const enabledBonusQualifications = new Set(
+      module.bonusQualifications.filter((code) => {
+        const q = game.qualifications.find((qual) => qual.code === code);
+        return !!q && q.enabled;
+      }),
+    );
+
+    const activeBonusWorkers = activeWorkers.filter((person) =>
+      person.qualifications.some((code) => enabledBonusQualifications.has(code)),
+    );
+    for (const _ of activeBonusWorkers) {
+      addResourceChangesToDelta(delta, type.perTick, +1);
+    }
   }
 
   // Personen-Effekte

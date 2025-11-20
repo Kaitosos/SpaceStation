@@ -7,6 +7,14 @@ export interface ResourceDelta {
   amount: number;
 }
 
+export interface Qualification {
+  code: string;
+  title: string;
+  enabled: boolean;
+  costs: ResourceDelta[];
+  learningDuration: number;
+}
+
 export interface ResourceConfig {
   name: ResourceName;
   hasMax: boolean;
@@ -69,6 +77,7 @@ export interface EventOption {
   explanation?: string;
   effects: ResourceDelta[];
   enableBuildings?: string[];
+  enableQualifications?: string[];
 }
 
 export interface Person {
@@ -77,6 +86,12 @@ export interface Person {
   tags: string[];
   incomePerTick: ResourceDelta[];
   needsPerTick: ResourceDelta[];
+  work: string | null;
+  equipment: string[];
+  unavailableFor: number;
+  qualifications: string[];
+  faceImage?: string;
+  bodyImage?: string;
 }
 
 export interface Cell {
@@ -84,6 +99,7 @@ export interface Cell {
   y: number;
   buildingTypeId: string | null;
   isRoot?: boolean;
+  moduleId?: string | null;
 }
 
 export interface Grid {
@@ -104,15 +120,37 @@ export interface BuildingType {
   cost: ResourceDelta[];
   perTick: ResourceDelta[];
   maxBonus: ResourceDelta[];
+  requiredQualifications?: string[];
+  bonusQualifications?: string[];
+  workerMax?: number;
+  activeByDefault?: boolean;
+}
+
+export interface ModuleState {
+  id: string;
+  typeId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  active: boolean;
+  requiredQualifications: string[];
+  bonusQualifications: string[];
+  workers: string[];
+  workerMax: number;
 }
 
 export interface GameState {
   resources: ResourcesState;
   people: Person[];
+  qualifications: Qualification[];
   grid: Grid;
+  modules: ModuleState[];
   events: GameEventState[];
   activeEventPopup: ActiveEventPopup | null;
   selectedBuildingTypeId: string | null;
+  selectedModuleId: string | null;
+  screen: 'build' | 'personnel';
   ticks: number;
   days: number;
   messages: string[]; // Log-Nachrichten aus der Logik
