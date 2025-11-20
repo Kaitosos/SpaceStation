@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./devtools/config-editor/dist",
+    "rootDir": "."
+  },
+  "include": [
+    "devtools/config-editor/configEditor.ts",
+    "src/config.ts",
+    "src/types.ts"
+  ]
+}

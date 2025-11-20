@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "build:test": "tsc -p tsconfig.test.json",
+    "build:devtool": "tsc -p tsconfig.devtool.json",
     "test": "npm run build:test && node --test dist-test/__tests__/**/*.js"
   },
   "keywords": [],
