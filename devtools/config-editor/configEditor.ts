@@ -17,16 +17,20 @@ import {
   ResourceDelta,
   ResourceConditionConfig,
   TimeConditionConfig,
+  TranslationTable,
+  TranslationTableEntry,
 } from '../../src/types';
+import { TRANSLATION_TABLES } from '../../src/translationTables';
 
 interface EditorState {
   resources: ResourceConfig[];
   buildings: BuildingType[];
   qualifications: Qualification[];
   events: EventConfig[];
+  translationTables: TranslationTable[];
 }
 
-type TabKey = 'resources' | 'buildings' | 'qualifications' | 'events';
+type TabKey = 'resources' | 'buildings' | 'qualifications' | 'events' | 'translations';
 
 const isDevEnvironment = (): boolean => {
   const host = window.location.hostname;
@@ -38,6 +42,7 @@ const cloneState = (): EditorState => ({
   buildings: JSON.parse(JSON.stringify(BUILDING_TYPES)),
   qualifications: JSON.parse(JSON.stringify(QUALIFICATION_CONFIGS)),
   events: JSON.parse(JSON.stringify(EVENT_CONFIGS)),
+  translationTables: JSON.parse(JSON.stringify(TRANSLATION_TABLES)),
 });
 
 const state: EditorState = cloneState();
@@ -47,6 +52,7 @@ const selection: Record<TabKey, number> = {
   buildings: 0,
   qualifications: 0,
   events: 0,
+  translations: 0,
 };
 
 let activeTab: TabKey = 'resources';
@@ -128,6 +134,20 @@ const addSubheading = (container: HTMLElement, title: string): void => {
   h.textContent = title;
   container.appendChild(h);
 };
+
+const formatTranslationEntries = (entries: TranslationTableEntry[]): string =>
+  entries.map((entry) => `${entry.value}:${entry.label}`).join('\n');
+
+const parseTranslationEntries = (text: string): TranslationTableEntry[] =>
+  text
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [value, label] = line.split(':');
+      return { value: Number(value ?? 0), label: (label ?? '').trim() } as TranslationTableEntry;
+    })
+    .filter((entry) => entry.label.length > 0);
 
 const formatQuestChanges = (changes?: (QuestFlagChange | QuestTimerChange)[]): string =>
   (changes || [])
@@ -510,6 +530,40 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
   container.appendChild(card);
 };
 
+const createTranslationCard = (table: TranslationTable, container: HTMLElement, onDelete: () => void): void => {
+  const card = document.createElement('div');
+  card.className = 'devcfg-card';
+
+  card.appendChild(field('ID', createTextInput(table.id, (v) => (table.id = v))));
+  card.appendChild(field('Name', createTextInput(table.name, (v) => (table.name = v))));
+  card.appendChild(
+    field(
+      'Fallback-Label (optional)',
+      createTextInput(table.defaultLabel ?? '', (v) => (table.defaultLabel = v || undefined)),
+      'Wird genutzt, wenn kein Eintrag gefunden wird',
+    ),
+  );
+  card.appendChild(
+    field(
+      'Einträge (value:Label pro Zeile)',
+      (() => {
+        const area = document.createElement('textarea');
+        area.value = formatTranslationEntries(table.entries);
+        area.addEventListener('input', () => (table.entries = parseTranslationEntries(area.value)));
+        return area;
+      })(),
+      'Leere Zeilen werden ignoriert',
+    ),
+  );
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.textContent = 'Tabelle löschen';
+  deleteBtn.addEventListener('click', onDelete);
+  card.appendChild(deleteBtn);
+
+  container.appendChild(card);
+};
+
 const newResource = (): ResourceConfig => ({
   name: 'neue_ressource',
   hasMax: false,
@@ -558,6 +612,12 @@ const newEvent = (): EventConfig => ({
   ],
 });
 
+const newTranslationTable = (): TranslationTable => ({
+  id: 'neue_tabelle',
+  name: 'Neue Tabelle',
+  entries: [],
+});
+
 const ensureSelectionInRange = (): void => {
   const clamp = (key: TabKey, listLength: number): void => {
     if (listLength === 0) {
@@ -572,6 +632,7 @@ const ensureSelectionInRange = (): void => {
   clamp('buildings', state.buildings.length);
   clamp('qualifications', state.qualifications.length);
   clamp('events', state.events.length);
+  clamp('translations', state.translationTables.length);
 };
 
 const generateConfigTs = (): string => {
@@ -580,7 +641,8 @@ const generateConfigTs = (): string => {
     `export const RESOURCE_CONFIGS = ${toJSON(state.resources)} as const;\n` +
     `export const BUILDING_TYPES = ${toJSON(state.buildings)} as const;\n` +
     `export const QUALIFICATION_CONFIGS = ${toJSON(state.qualifications)} as const;\n` +
-    `export const EVENT_CONFIGS = ${toJSON(state.events)} as const;\n`;
+    `export const EVENT_CONFIGS = ${toJSON(state.events)} as const;\n` +
+    `export const TRANSLATION_TABLES = ${toJSON(state.translationTables)} as const;\n`;
 };
 
 const downloadConfig = (): void => {
@@ -635,6 +697,7 @@ const renderConfigEditor = (): void => {
     { key: 'buildings', label: 'Gebäude' },
     { key: 'qualifications', label: 'Qualifikationen' },
     { key: 'events', label: 'Events' },
+    { key: 'translations', label: 'Translation Tables' },
   ];
 
   const tabNav = document.createElement('div');
@@ -754,6 +817,20 @@ const renderConfigEditor = (): void => {
         (item, idx) => item.title || `Event ${idx + 1}`,
         () => state.events.push(newEvent()),
         (item, container) => createEventCard(item, container),
+      );
+      break;
+    case 'translations':
+      renderListWithDetails<TranslationTable>(
+        state.translationTables,
+        'translations',
+        (item, idx) => item.name || `Tabelle ${idx + 1}`,
+        () => state.translationTables.push(newTranslationTable()),
+        (item, container) =>
+          createTranslationCard(item, container, () => {
+            state.translationTables.splice(selection.translations, 1);
+            ensureSelectionInRange();
+            renderConfigEditor();
+          }),
       );
       break;
   }

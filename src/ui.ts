@@ -1,5 +1,5 @@
 // src/ui.ts
-import { EventOption, GameState, ResourceDelta, ModuleState, Person } from './types';
+import { DataPoint, EventOption, GameState, ResourceDelta, ModuleState, Person } from './types';
 import { BUILDING_TYPES } from './config';
 import {
   placeBuildingAt,
@@ -10,6 +10,7 @@ import {
   startTraining,
   getModuleById,
 } from './core';
+import { translateValue } from './translationTables';
 
 let resourcesEl: HTMLElement;
 let timeDisplayEl: HTMLElement;
@@ -616,6 +617,37 @@ function renderPersonDetail(game: GameState): void {
     person.incomePerTick,
   )}`;
   personDetailBodyEl.appendChild(balance);
+
+  const dataHeader = document.createElement('div');
+  dataHeader.className = 'card-meta';
+  dataHeader.textContent = 'Persönliche Daten:';
+  personDetailBodyEl.appendChild(dataHeader);
+
+  const dataList = document.createElement('div');
+  dataList.className = 'card';
+  dataList.classList.add('card-meta');
+
+  const renderDataPoint = (dataPoint: DataPoint): HTMLElement => {
+    const row = document.createElement('div');
+    row.className = 'card-meta';
+    const translated = dataPoint.translationTable
+      ? translateValue(dataPoint.translationTable, dataPoint.value)
+      : null;
+    const valueText = translated ? `${translated} (${dataPoint.value})` : String(dataPoint.value);
+    row.textContent = `${dataPoint.name}: ${valueText}`;
+    return row;
+  };
+
+  if (person.personalData.length) {
+    person.personalData.forEach((point) => dataList.appendChild(renderDataPoint(point)));
+  } else {
+    const row = document.createElement('div');
+    row.className = 'card-meta';
+    row.textContent = 'Keine persönlichen Daten hinterlegt.';
+    dataList.appendChild(row);
+  }
+
+  personDetailBodyEl.appendChild(dataList);
 
   const qualRow = document.createElement('div');
   qualRow.className = 'pill-row';

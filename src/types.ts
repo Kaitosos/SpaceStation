@@ -112,6 +112,25 @@ export interface QuestTimerChange {
   value?: number;
 }
 
+export interface TranslationTableEntry {
+  value: number;
+  label: string;
+}
+
+export interface TranslationTable {
+  id: string;
+  name: string;
+  entries: TranslationTableEntry[];
+  defaultLabel?: string;
+}
+
+export interface DataPoint {
+  type: string;
+  name: string;
+  value: number;
+  translationTable: string | null;
+}
+
 export interface Person {
   id: string;
   name: string;
@@ -122,6 +141,7 @@ export interface Person {
   equipment: string[];
   unavailableFor: number;
   qualifications: string[];
+  personalData: DataPoint[];
   training?: { qualificationCode: string; remainingTicks: number };
   faceImage?: string;
   bodyImage?: string;

@@ -24,6 +24,7 @@ import {
   EVENT_CONFIGS,
   QUALIFICATION_CONFIGS,
 } from './config';
+import { createInitialPeople, createRandomPerson } from './personGenerator';
 
 export const BUILDING_TYPE_MAP = new Map(
   BUILDING_TYPES.map((t) => [t.id, t]),
@@ -33,10 +34,6 @@ let moduleIdCounter = 1;
 
 function nextModuleId(): string {
   return 'm_' + String(moduleIdCounter++).padStart(3, '0');
-}
-
-function randomFrom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
 }
 
 export function createInitialResources(): ResourcesState {
@@ -117,41 +114,6 @@ export function recalcResourceMaximums(game: GameState): void {
     const bonus = maxBonus[resName] || 0;
     res.max = baseMax + bonus;
   }
-}
-
-export function createRandomPerson(index: number): Person {
-  const firstNames = ['Jax', 'Mara', 'Dex', 'Nova', 'Rin', 'Zoe', 'Kade', 'Vex'];
-  const lastNames = ['Vega', 'Ishikawa', 'Black', 'Kwon', 'Nyx', 'Ortiz', 'Kade', 'Flux'];
-  const id = 'p_' + String(index + 1).padStart(3, '0');
-
-  const startingQualifications = QUALIFICATION_CONFIGS.filter((q) => q.enabled).map((q) => q.code);
-  const randomQual = randomFrom(startingQualifications);
-  const qualifications = Array.from(new Set([randomQual]));
-
-  return {
-    id,
-    name: `${randomFrom(firstNames)} ${randomFrom(lastNames)}`,
-    tags: ['citizen'],
-    incomePerTick: [{ resource: 'money', amount: 0.5 }],
-    needsPerTick: [
-      { resource: 'oxygen', amount: 0.2 },
-      { resource: 'energy', amount: 0.1 },
-    ],
-    work: null,
-    equipment: [],
-    unavailableFor: 0,
-    qualifications,
-    faceImage: undefined,
-    bodyImage: undefined,
-  };
-}
-
-export function createInitialPeople(): Person[] {
-  const people: Person[] = [];
-  for (let i = 0; i < 4; i++) {
-    people.push(createRandomPerson(i));
-  }
-  return people;
 }
 
 export function createInitialEvents(): GameEventState[] {
