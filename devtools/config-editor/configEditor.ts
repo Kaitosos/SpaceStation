@@ -11,6 +11,8 @@ import {
   ConditionConfig,
   EventConfig,
   Qualification,
+  QuestFlagChange,
+  QuestTimerChange,
   ResourceConfig,
   ResourceDelta,
   ResourceConditionConfig,
@@ -126,6 +128,25 @@ const addSubheading = (container: HTMLElement, title: string): void => {
   h.textContent = title;
   container.appendChild(h);
 };
+
+const formatQuestChanges = (changes?: (QuestFlagChange | QuestTimerChange)[]): string =>
+  (changes || [])
+    .map((c) =>
+      c.op === 'delete' ? `${c.id},delete` : `${c.id},${c.op},${c.value === undefined ? 0 : c.value}`,
+    )
+    .join('\n');
+
+const parseQuestChanges = (text: string): (QuestFlagChange | QuestTimerChange)[] =>
+  text
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id, op, value] = line.split(',').map((s) => s.trim());
+      const operation = op === 'delete' ? 'delete' : op === 'add' ? 'add' : 'set';
+      const parsedValue = Number(value ?? 0);
+      return { id, op: operation, value: isNaN(parsedValue) ? 0 : parsedValue } as QuestFlagChange;
+    });
 
 const createResourceCard = (config: ResourceConfig, container: HTMLElement): void => {
   const card = document.createElement('div');
@@ -300,12 +321,21 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
   );
   card.appendChild(field('Einmalig?', createCheckbox(Boolean(event.once), (v) => (event.once = v))));
 
-  addSubheading(card, 'Bedingungen (pro Zeile z. B. resource:oxygen,lte,20 oder time:ticksGte=60)');
+  addSubheading(
+    card,
+    'Bedingungen (pro Zeile z. B. resource:oxygen,lte,20 oder time:ticksGte=60 oder questFlag:flag_id,eq,1)',
+  );
   const conditionArea = document.createElement('textarea');
   conditionArea.value = event.conditions
     .map((cond) => {
       if (cond.type === 'resource') {
         return `resource:${cond.resource},${cond.comparator},${cond.value}`;
+      }
+      if (cond.type === 'questFlag') {
+        return `questFlag:${cond.flag},${cond.comparator},${cond.value}`;
+      }
+      if (cond.type === 'questTimer') {
+        return `questTimer:${cond.timer},${cond.comparator},${cond.value}`;
       }
       const parts = [] as string[];
       if (cond.ticksGte !== undefined) parts.push(`ticksGte=${cond.ticksGte}`);
@@ -333,6 +363,20 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
               if (k === 'daysGte') cond.daysGte = num;
             });
           return cond;
+        }
+        if (kind === 'questFlag') {
+          const [flag, comparator, value] = (rest || '').split(',').map((s) => s.trim());
+          const cmp: Comparator = ['lt', 'lte', 'gt', 'gte', 'eq', 'neq'].includes(comparator as Comparator)
+            ? (comparator as Comparator)
+            : 'eq';
+          return { type: 'questFlag', flag: flag || 'flag', comparator: cmp, value: Number(value || 0) };
+        }
+        if (kind === 'questTimer') {
+          const [timer, comparator, value] = (rest || '').split(',').map((s) => s.trim());
+          const cmp: Comparator = ['lt', 'lte', 'gt', 'gte', 'eq', 'neq'].includes(comparator as Comparator)
+            ? (comparator as Comparator)
+            : 'eq';
+          return { type: 'questTimer', timer: timer || 'timer', comparator: cmp, value: Number(value || 0) };
         }
         const [resource, comparator, value] = (rest || '').split(',').map((s) => s.trim());
         const cmp: Comparator = ['lt', 'lte', 'gt', 'gte', 'eq', 'neq'].includes(comparator as Comparator)
@@ -377,6 +421,34 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
           area.addEventListener('input', () => (option.effects = parseResourceDeltas(area.value)));
           return area;
         })(),
+      ),
+    );
+    optWrap.appendChild(
+      field(
+        'Quest-Flags (id,op,value pro Zeile)',
+        (() => {
+          const area = document.createElement('textarea');
+          area.value = formatQuestChanges(option.questFlagChanges);
+          area.addEventListener('input', () => {
+            option.questFlagChanges = parseQuestChanges(area.value) as QuestFlagChange[];
+          });
+          return area;
+        })(),
+        'op: set | add | delete',
+      ),
+    );
+    optWrap.appendChild(
+      field(
+        'Quest-Timer (id,op,value pro Zeile)',
+        (() => {
+          const area = document.createElement('textarea');
+          area.value = formatQuestChanges(option.questTimerChanges);
+          area.addEventListener('input', () => {
+            option.questTimerChanges = parseQuestChanges(area.value) as QuestTimerChange[];
+          });
+          return area;
+        })(),
+        'op: set | add | delete',
       ),
     );
     optWrap.appendChild(
@@ -426,6 +498,8 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
       text: 'Neue Option',
       explanation: undefined,
       effects: [],
+      questFlagChanges: [],
+      questTimerChanges: [],
       enableBuildings: undefined,
       enableQualifications: undefined,
     });
