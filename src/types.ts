@@ -122,6 +122,7 @@ export interface Person {
   equipment: string[];
   unavailableFor: number;
   qualifications: string[];
+  training?: { qualificationCode: string; remainingTicks: number };
   faceImage?: string;
   bodyImage?: string;
 }
@@ -184,7 +185,8 @@ export interface GameState {
   activeEventPopup: ActiveEventPopup | null;
   selectedBuildingTypeId: string | null;
   selectedModuleId: string | null;
-  screen: 'build' | 'personnel';
+  selectedPersonId: string | null;
+  screen: 'build' | 'personnel' | 'personDetail';
   ticks: number;
   days: number;
   messages: string[]; // Log-Nachrichten aus der Logik

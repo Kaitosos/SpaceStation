@@ -67,6 +67,58 @@ export function createGrid(width: number, height: number): Grid {
   return { width, height, cells };
 }
 
+export function rebuildGridFromModules(game: GameState): void {
+  for (const cell of game.grid.cells) {
+    cell.buildingTypeId = null;
+    cell.moduleId = null;
+    cell.isRoot = false;
+  }
+
+  for (const module of game.modules) {
+    const type = BUILDING_TYPE_MAP.get(module.typeId);
+    if (!type) continue;
+    const cells = getCellsForArea(game, module.x, module.y, module.width, module.height);
+    if (!cells) continue;
+    cells.forEach((cell, idx) => {
+      cell.buildingTypeId = module.typeId;
+      cell.moduleId = module.id;
+      cell.isRoot = idx === 0;
+    });
+  }
+}
+
+function expandGridWithBorder(game: GameState): void {
+  const oldGrid = game.grid;
+  game.grid = createGrid(oldGrid.width + 2, oldGrid.height + 2);
+  for (const module of game.modules) {
+    module.x += 1;
+    module.y += 1;
+  }
+  rebuildGridFromModules(game);
+}
+
+export function recalcResourceMaximums(game: GameState): void {
+  const maxBonus: Record<string, number> = {};
+  for (const name in game.resources) {
+    maxBonus[name] = 0;
+  }
+
+  for (const module of game.modules) {
+    const type = BUILDING_TYPE_MAP.get(module.typeId);
+    if (!type) continue;
+    addResourceChangesToDelta(maxBonus, type.maxBonus, +1);
+  }
+
+  for (const resName in game.resources) {
+    const res = game.resources[resName];
+    const cfg: ResourceConfig | undefined = RESOURCE_CONFIGS.find((c) => c.name === resName);
+    if (!cfg || !cfg.hasMax) continue;
+    const baseMax = cfg.initialMax ?? 0;
+    const bonus = maxBonus[resName] || 0;
+    res.max = baseMax + bonus;
+  }
+}
+
 export function createRandomPerson(index: number): Person {
   const firstNames = ['Jax', 'Mara', 'Dex', 'Nova', 'Rin', 'Zoe', 'Kade', 'Vex'];
   const lastNames = ['Vega', 'Ishikawa', 'Black', 'Kwon', 'Nyx', 'Ortiz', 'Kade', 'Flux'];
@@ -96,7 +148,7 @@ export function createRandomPerson(index: number): Person {
 
 export function createInitialPeople(): Person[] {
   const people: Person[] = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 4; i++) {
     people.push(createRandomPerson(i));
   }
   return people;
@@ -121,7 +173,7 @@ export function createInitialGameState(): GameState {
     popRes.current = people.length;
   }
 
-  return {
+  const game: GameState = {
     resources,
     people,
     qualifications,
@@ -133,11 +185,26 @@ export function createInitialGameState(): GameState {
     activeEventPopup: null,
     selectedBuildingTypeId: null,
     selectedModuleId: null,
+    selectedPersonId: null,
     screen: 'build',
     ticks: 0,
     days: 0,
     messages: [],
   };
+
+  const startType = BUILDING_TYPE_MAP.get('habitat');
+  if (startType) {
+    const startX = Math.floor((grid.width - startType.size.width) / 2);
+    const startY = Math.floor((grid.height - startType.size.height) / 2);
+    const module = createModuleState('habitat', startX, startY, startType.size.width, startType.size.height);
+    game.modules.push(module);
+    rebuildGridFromModules(game);
+    recalcResourceMaximums(game);
+    game.selectedModuleId = module.id;
+    game.messages.push('Startmodul im Zentrum platziert.');
+  }
+
+  return game;
 }
 
 // ---------- Ressourcen-Helpers ----------
@@ -352,6 +419,30 @@ function createModuleState(typeId: string, x: number, y: number, width: number, 
   };
 }
 
+function moduleTouchesBoundary(game: GameState, x: number, y: number, width: number, height: number): boolean {
+  return x <= 0 || y <= 0 || x + width >= game.grid.width || y + height >= game.grid.height;
+}
+
+function isAdjacentToExistingModule(game: GameState, x: number, y: number, width: number, height: number): boolean {
+  if (!game.modules.length) return true;
+  for (let dy = 0; dy < height; dy++) {
+    for (let dx = 0; dx < width; dx++) {
+      const cx = x + dx;
+      const cy = y + dy;
+      const neighbors = [
+        getCell(game, cx + 1, cy),
+        getCell(game, cx - 1, cy),
+        getCell(game, cx, cy + 1),
+        getCell(game, cx, cy - 1),
+      ];
+      if (neighbors.some((c) => c && !!c.buildingTypeId)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function placeBuildingAt(game: GameState, x: number, y: number): void {
   const buildingId = game.selectedBuildingTypeId;
   if (!buildingId) {
@@ -382,6 +473,11 @@ export function placeBuildingAt(game: GameState, x: number, y: number): void {
     return;
   }
 
+  if (!isAdjacentToExistingModule(game, x, y, size.width, size.height)) {
+    game.messages.push('Module müssen angrenzend gebaut werden.');
+    return;
+  }
+
   if (!canAfford(game.resources, type.cost)) {
     game.messages.push('Nicht genug Ressourcen für ' + type.name + '.');
     return;
@@ -390,11 +486,13 @@ export function placeBuildingAt(game: GameState, x: number, y: number): void {
   applyResourceDeltas(game.resources, type.cost, -1);
   const module = createModuleState(type.id, x, y, size.width, size.height);
   game.modules.push(module);
-  cells.forEach((c, idx) => {
-    c.buildingTypeId = type.id;
-    c.isRoot = idx === 0;
-    c.moduleId = module.id;
-  });
+  const touchesEdge = moduleTouchesBoundary(game, x, y, size.width, size.height);
+  rebuildGridFromModules(game);
+  if (touchesEdge) {
+    expandGridWithBorder(game);
+    game.messages.push('Der verfügbare Baubereich wurde erweitert.');
+  }
+  recalcResourceMaximums(game);
   game.messages.push('Gebaut: ' + type.name);
 }
 
@@ -403,7 +501,7 @@ export function hasRequiredQualifications(person: Person, module: ModuleState): 
   return module.requiredQualifications.every((req) => person.qualifications.includes(req));
 }
 
-function getModuleById(game: GameState, moduleId: string): ModuleState | undefined {
+export function getModuleById(game: GameState, moduleId: string): ModuleState | undefined {
   return game.modules.find((m) => m.id === moduleId);
 }
 
@@ -456,6 +554,29 @@ export function toggleModuleActive(game: GameState, moduleId: string): void {
   game.messages.push(`${BUILDING_TYPE_MAP.get(mod.typeId)?.name || mod.typeId} ist jetzt ${mod.active ? 'aktiv' : 'passiv'}.`);
 }
 
+export function startTraining(game: GameState, personId: string, qualificationCode: string): string | null {
+  const person = game.people.find((p) => p.id === personId);
+  if (!person) return 'Unbekannte Person.';
+  if (person.training) return `${person.name} befindet sich bereits in einer Schulung.`;
+  if (person.qualifications.includes(qualificationCode)) return `${person.name} hat diese Qualifikation schon.`;
+
+  const qualification = game.qualifications.find((q) => q.code === qualificationCode);
+  if (!qualification || !qualification.enabled) return 'Diese Qualifikation ist noch nicht freigeschaltet.';
+
+  if (!canAfford(game.resources, qualification.costs)) {
+    return 'Für die Schulung fehlen Ressourcen.';
+  }
+
+  applyResourceDeltas(game.resources, qualification.costs, -1);
+  person.training = {
+    qualificationCode,
+    remainingTicks: qualification.learningDuration,
+  };
+  person.unavailableFor = Math.max(person.unavailableFor, qualification.learningDuration);
+  game.messages.push(`${person.name} startet Schulung: ${qualification.title}.`);
+  return null;
+}
+
 // ---------- Bevölkerung & Tick ----------
 
 export function trySpawnNewPerson(game: GameState): void {
@@ -490,15 +611,28 @@ export function updateGameTick(game: GameState): void {
 
   const resources = game.resources;
   const delta: Record<string, number> = {};
-  const maxBonus: Record<string, number> = {};
   for (const name in resources) {
     delta[name] = 0;
-    maxBonus[name] = 0;
   }
 
   for (const person of game.people) {
     if (person.unavailableFor > 0) {
       person.unavailableFor--;
+      if (person.unavailableFor < 0) person.unavailableFor = 0;
+    }
+    const training = person.training;
+    if (training) {
+      training.remainingTicks -= 1;
+      if (training.remainingTicks <= 0) {
+        if (!person.qualifications.includes(training.qualificationCode)) {
+          person.qualifications.push(training.qualificationCode);
+        }
+        const qualTitle =
+          game.qualifications.find((q) => q.code === training.qualificationCode)?.title || training.qualificationCode;
+        game.messages.push(`${person.name} hat die Schulung ${qualTitle} abgeschlossen.`);
+        person.training = undefined;
+        person.unavailableFor = Math.max(0, person.unavailableFor);
+      }
     }
   }
 
@@ -509,7 +643,6 @@ export function updateGameTick(game: GameState): void {
 
     // Basisproduktion (auch wenn nicht aktiv)
     addResourceChangesToDelta(delta, type.perTick, +1);
-    addResourceChangesToDelta(maxBonus, type.maxBonus, +1);
 
     if (!module.active) continue;
 
@@ -545,17 +678,7 @@ export function updateGameTick(game: GameState): void {
     addResourceChangesToDelta(delta, person.needsPerTick, -1);
   }
 
-  // Max-Werte
-  for (const resName in resources) {
-    const res = resources[resName];
-    const cfg: ResourceConfig | undefined = RESOURCE_CONFIGS.find(
-      (c) => c.name === resName,
-    );
-    if (!cfg || !cfg.hasMax) continue;
-    const baseMax = cfg.initialMax ?? 0;
-    const bonus = maxBonus[resName] || 0;
-    res.max = baseMax + bonus;
-  }
+  recalcResourceMaximums(game);
 
   // Deltas anwenden
   for (const resName in resources) {
