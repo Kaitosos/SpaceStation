@@ -95,9 +95,24 @@ test('placing a building spends resources and updates tick calculations', () => 
   assert.ok(game.resources['money'].current > 800);
 });
 
+test('updateGameTick respects resource caps when applying deltas', () => {
+  const game = createInitialGameState();
+
+  game.selectedBuildingTypeId = 'generator';
+  placeBuildingAt(game, 0, 0);
+
+  const energy = game.resources['energy'];
+  energy.current = 99;
+
+  updateGameTick(game);
+
+  assert.strictEqual(energy.current, 100);
+});
+
 test('assigning workers respects requirements and capacity toggles module state', () => {
   const game = createInitialGameState();
-  const generator = game.people.find((p) => p.qualifications.includes('tech_basic'))!;
+  const generator = game.people[0];
+  generator.qualifications = Array.from(new Set([...generator.qualifications, 'tech_basic']));
 
   game.selectedBuildingTypeId = 'generator';
   placeBuildingAt(game, 0, 0);
