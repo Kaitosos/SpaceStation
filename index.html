@@ -398,12 +398,33 @@
       overflow: hidden;
     }
 
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
     .panel h3 {
       margin: 0;
       font-size: 13px;
       letter-spacing: 0.05em;
       text-transform: uppercase;
       color: #8be9fd;
+    }
+
+    #people-filter {
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(80, 80, 140, 0.8);
+      background: rgba(15, 15, 40, 0.9);
+      color: #f5f5ff;
+      font-size: 12px;
+    }
+
+    #people-filter::placeholder {
+      color: #9da0c6;
     }
 
     .list {
@@ -482,9 +503,83 @@
       box-shadow: 0 0 8px rgba(0, 245, 255, 0.25);
     }
 
+    .module-group-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .module-row {
+      border: 1px solid rgba(70, 70, 120, 0.6);
+      border-radius: 8px;
+      padding: 6px;
+      display: grid;
+      gap: 4px;
+      background: rgba(20, 20, 40, 0.65);
+      cursor: pointer;
+    }
+
+    .module-row:hover {
+      border-color: #00f5ff;
+    }
+
+    .module-row.inactive {
+      opacity: 0.85;
+    }
+
+    .module-row.selected {
+      border-color: #50fa7b;
+      box-shadow: 0 0 6px rgba(80, 250, 123, 0.25);
+    }
+
+    .module-row-title {
+      font-weight: 600;
+    }
+
+    .module-row-actions {
+      display: flex;
+      gap: 6px;
+    }
+
     .person-status {
       font-size: 11px;
       color: #c6c6e6;
+    }
+
+    #person-detail-screen {
+      grid-template-columns: 1fr;
+      padding: 10px;
+    }
+
+    .detail-panel {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .detail-header {
+      justify-content: flex-start;
+      gap: 12px;
+    }
+
+    #person-detail-name {
+      margin: 0;
+    }
+
+    .detail-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .detail-train-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 6px;
+      align-items: center;
+      padding: 6px;
+      border-radius: 8px;
+      background: rgba(20, 20, 40, 0.65);
+      border: 1px solid rgba(70, 70, 120, 0.6);
     }
   </style>
 </head>
@@ -509,12 +604,27 @@
 
     <div id="personnel-screen" class="screen">
       <div id="module-list" class="panel">
-        <h3>Module</h3>
+        <div class="panel-header">
+          <h3>Module</h3>
+        </div>
         <div class="list" id="module-cards"></div>
       </div>
       <div id="people-list" class="panel">
-        <h3>Personal</h3>
+        <div class="panel-header">
+          <h3>Personal</h3>
+          <input id="people-filter" type="search" placeholder="Suche nach Name, Modul oder Qualifikation" />
+        </div>
         <div class="list" id="people-cards"></div>
+      </div>
+    </div>
+
+    <div id="person-detail-screen" class="screen">
+      <div id="person-detail-panel" class="panel detail-panel">
+        <div class="panel-header detail-header">
+          <button id="person-detail-back" class="tab-button">← Zurück</button>
+          <h3 id="person-detail-name">Person</h3>
+        </div>
+        <div class="list" id="person-detail-body"></div>
       </div>
     </div>
   </div>

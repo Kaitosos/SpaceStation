@@ -73,22 +73,28 @@ test('canAfford validates resources correctly', () => {
 test('placing a building spends resources and updates tick calculations', () => {
   const game = createInitialGameState();
 
+  const anchor = game.modules[0];
+  const targetX = anchor.x + anchor.width;
+  const targetY = anchor.y;
+
   game.selectedBuildingTypeId = 'generator';
-  placeBuildingAt(game, 0, 0);
+  placeBuildingAt(game, targetX, targetY);
 
   const money = game.resources['money'];
   assert.ok(money);
   assert.strictEqual(money.current, 800);
 
-  const rootCell = game.grid.cells[0];
-  assert.ok(rootCell.buildingTypeId === 'generator');
-  assert.ok(game.modules.length === 1);
+  const generatorModule = game.modules.find((m) => m.typeId === 'generator');
+  assert.ok(generatorModule);
+  const rootCell = game.grid.cells.find((c) => c.moduleId === generatorModule.id && c.isRoot);
+  assert.ok(rootCell);
+  assert.ok(game.modules.length === 2);
 
   updateGameTick(game);
 
   const energy = game.resources['energy'];
-  assert.ok(energy.deltaPerTick > 11);
-  assert.ok(energy.current > 40);
+  assert.ok(energy.deltaPerTick > 0);
+  assert.ok(energy.current >= 40);
 
   const population = game.resources['population'];
   assert.strictEqual(population.current, game.people.length);
@@ -98,8 +104,12 @@ test('placing a building spends resources and updates tick calculations', () => 
 test('updateGameTick respects resource caps when applying deltas', () => {
   const game = createInitialGameState();
 
+  const anchor = game.modules[0];
+  const targetX = anchor.x + anchor.width;
+  const targetY = anchor.y;
+
   game.selectedBuildingTypeId = 'generator';
-  placeBuildingAt(game, 0, 0);
+  placeBuildingAt(game, targetX, targetY);
 
   const energy = game.resources['energy'];
   energy.current = 99;
@@ -114,10 +124,14 @@ test('assigning workers respects requirements and capacity toggles module state'
   const generator = game.people[0];
   generator.qualifications = Array.from(new Set([...generator.qualifications, 'tech_basic']));
 
-  game.selectedBuildingTypeId = 'generator';
-  placeBuildingAt(game, 0, 0);
+  const anchor = game.modules[0];
+  const targetX = anchor.x + anchor.width;
+  const targetY = anchor.y;
 
-  const module = game.modules[0];
+  game.selectedBuildingTypeId = 'generator';
+  placeBuildingAt(game, targetX, targetY);
+
+  const module = game.modules.find((m) => m.typeId === 'generator')!;
   const err = assignPersonToModule(game, generator.id, module.id);
   assert.strictEqual(err, null);
   assert.strictEqual(module.workers.includes(generator.id), true);

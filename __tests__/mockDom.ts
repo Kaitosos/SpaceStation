@@ -32,6 +32,7 @@ class MockElement {
   children: MockElement[] = [];
   parent: MockElement | null = null;
   textContent = '';
+  value = '';
   dataset: Record<string, string> = {};
   style: Record<string, string> = {};
   listeners: Record<string, ((ev: any) => void)[]> = {};
@@ -144,11 +145,17 @@ export function setupMockDom() {
     'people-cards',
     'build-screen',
     'personnel-screen',
-    'tab-build',
-    'tab-personnel',
+    'person-detail-screen',
+    'person-detail-name',
+    'person-detail-body',
   ];
 
-  ids.forEach((id) => document.createElementWithId(id === 'tab-build' || id === 'tab-personnel' ? 'button' : 'div', id));
+  const buttonIds = ['tab-build', 'tab-personnel', 'person-detail-back'];
+  const inputIds = ['people-filter'];
+
+  ids.forEach((id) => document.createElementWithId('div', id));
+  buttonIds.forEach((id) => document.createElementWithId('button', id));
+  inputIds.forEach((id) => document.createElementWithId('input', id));
 
   const window: any = { document };
   (global as any).window = window;

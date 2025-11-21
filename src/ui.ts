@@ -7,6 +7,8 @@ import {
   removePersonFromModule,
   toggleModuleActive,
   hasRequiredQualifications,
+  startTraining,
+  getModuleById,
 } from './core';
 
 let resourcesEl: HTMLElement;
@@ -22,11 +24,17 @@ let moduleCardsEl: HTMLElement;
 let peopleCardsEl: HTMLElement;
 let buildScreenEl: HTMLElement;
 let personnelScreenEl: HTMLElement;
+let personDetailScreenEl: HTMLElement;
 let tabBuildBtn: HTMLButtonElement;
 let tabPersonnelBtn: HTMLButtonElement;
+let peopleFilterInput: HTMLInputElement;
+let personDetailHeaderEl: HTMLElement;
+let personDetailBodyEl: HTMLElement;
+let personDetailBackBtn: HTMLButtonElement;
 let onChooseEventOption: ((option: EventOption) => void) | null = null;
 let selectedBuildTypeFilter: string | 'all' = 'all';
 let lastTimeDisplay = '';
+let peopleFilterTerm = '';
 const resourceRows = new Map<
   string,
   {
@@ -323,21 +331,35 @@ function renderGrid(game: GameState): void {
 
 function renderScreenTabs(game: GameState): void {
   const isBuild = game.screen === 'build';
+  const isPersonnel = game.screen === 'personnel';
+  const isPersonDetail = game.screen === 'personDetail';
   buildScreenEl.classList.toggle('active', isBuild);
-  personnelScreenEl.classList.toggle('active', !isBuild);
+  personnelScreenEl.classList.toggle('active', isPersonnel);
+  personDetailScreenEl.classList.toggle('active', isPersonDetail);
   tabBuildBtn.classList.toggle('active', isBuild);
-  tabPersonnelBtn.classList.toggle('active', !isBuild);
+  tabPersonnelBtn.classList.toggle('active', isPersonnel || isPersonDetail);
 }
 
 function personCanWorkInModule(person: Person, module: ModuleState): boolean {
   return person.unavailableFor <= 0 && hasRequiredQualifications(person, module);
 }
 
+function personMatchesFilter(person: Person, filter: string, game: GameState): boolean {
+  const query = filter.trim().toLowerCase();
+  if (!query) return true;
+
+  const module = person.work ? getModuleById(game, person.work) : null;
+  const moduleName = module ? buildingTypeMap.get(module.typeId)?.name || module.typeId : '';
+  const qualificationTitles = person.qualifications.map((code) => qualificationTitle(game, code));
+  return (
+    person.name.toLowerCase().includes(query) ||
+    moduleName.toLowerCase().includes(query) ||
+    qualificationTitles.some((t) => t.toLowerCase().includes(query))
+  );
+}
+
 function renderModuleList(game: GameState): void {
   moduleCardsEl.innerHTML = '';
-  if (!game.selectedModuleId && game.modules.length) {
-    game.selectedModuleId = game.modules[0].id;
-  }
   if (!game.modules.length) {
     const empty = document.createElement('div');
     empty.className = 'card card-meta';
@@ -346,74 +368,104 @@ function renderModuleList(game: GameState): void {
     return;
   }
 
+  const groups = new Map<string, ModuleState[]>();
   for (const mod of game.modules) {
-    const type = buildingTypeMap.get(mod.typeId);
-    const card = document.createElement('div');
-    card.className = 'card module-card';
-    card.classList.toggle('active', mod.active);
-    card.classList.toggle('inactive', !mod.active);
-    if (game.selectedModuleId === mod.id) card.classList.add('selected');
+    const arr = groups.get(mod.typeId) || [];
+    arr.push(mod);
+    groups.set(mod.typeId, arr);
+  }
 
+  if (!game.selectedModuleId && game.modules.length) {
+    game.selectedModuleId = game.modules[0].id;
+  }
+
+  const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
+    const typeA = buildingTypeMap.get(a[0])?.name || a[0];
+    const typeB = buildingTypeMap.get(b[0])?.name || b[0];
+    return typeA.localeCompare(typeB);
+  });
+
+  for (const [typeId, mods] of sortedGroups) {
+    const type = buildingTypeMap.get(typeId);
+    const card = document.createElement('div');
+    card.className = 'card module-card module-group';
     const header = document.createElement('div');
     header.className = 'card-header';
-    header.textContent = type?.name || mod.typeId;
+    header.textContent = `${type?.name || typeId} (${mods.length})`;
+
+    const activeCount = mods.filter((m) => m.active).length;
+    const slotTotal = mods.reduce((sum, m) => sum + (m.workerMax ?? 0), 0);
+    const usedSlots = mods.reduce((sum, m) => sum + m.workers.length, 0);
     const status = document.createElement('span');
     status.className = 'card-meta';
-    status.textContent = mod.active ? 'Aktiv' : 'Passiv';
+    status.textContent = `${activeCount}/${mods.length} aktiv • Slots: ${usedSlots}/${slotTotal}`;
     header.appendChild(status);
     card.appendChild(header);
 
-    const workerMeta = document.createElement('div');
-    workerMeta.className = 'card-meta';
-    workerMeta.textContent = `Slots: ${mod.workers.length}/${mod.workerMax ?? 0}`;
-    card.appendChild(workerMeta);
+    const rows = document.createElement('div');
+    rows.className = 'module-group-rows';
 
-    if (mod.requiredQualifications.length) {
-      const reqRow = document.createElement('div');
-      reqRow.className = 'pill-row';
-      for (const code of mod.requiredQualifications) {
-        const pill = document.createElement('span');
-        pill.className = 'pill';
-        pill.textContent = 'Pflicht: ' + qualificationTitle(game, code);
-        reqRow.appendChild(pill);
-      }
-      card.appendChild(reqRow);
+    for (const mod of mods) {
+      const row = document.createElement('div');
+      row.className = 'module-row';
+      if (game.selectedModuleId === mod.id) row.classList.add('selected');
+      row.classList.toggle('inactive', !mod.active);
+
+      const title = document.createElement('div');
+      title.className = 'module-row-title';
+      title.textContent = `#${mod.id} • Position ${mod.x}/${mod.y}`;
+
+      const workerMeta = document.createElement('div');
+      workerMeta.className = 'card-meta';
+      const workerNames = mod.workers
+        .map((id) => game.people.find((p) => p.id === id)?.name)
+        .filter(Boolean);
+      const qualBadges = [...mod.requiredQualifications, ...mod.bonusQualifications].map(
+        (code) => qualificationTitle(game, code),
+      );
+      const qualText = qualBadges.length ? ` • ${qualBadges.join(', ')}` : '';
+      workerMeta.textContent = `Slots: ${mod.workers.length}/${mod.workerMax ?? 0}${qualText}`;
+
+      const workerLine = document.createElement('div');
+      workerLine.className = 'card-meta';
+      workerLine.textContent = workerNames.length ? `Arbeiter: ${workerNames.join(', ')}` : 'Keine zugewiesen';
+
+      const actions = document.createElement('div');
+      actions.className = 'module-row-actions';
+
+      const selectBtn = document.createElement('button');
+      selectBtn.textContent = 'Wählen';
+      selectBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        game.selectedModuleId = mod.id;
+        renderAll(game);
+      });
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.textContent = mod.active ? 'Deaktivieren' : 'Aktivieren';
+      toggleBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        toggleModuleActive(game, mod.id);
+        renderAll(game);
+      });
+
+      actions.appendChild(selectBtn);
+      actions.appendChild(toggleBtn);
+
+      row.appendChild(title);
+      row.appendChild(workerMeta);
+      row.appendChild(workerLine);
+      row.appendChild(actions);
+
+      row.addEventListener('click', () => {
+        game.selectedModuleId = mod.id;
+        renderAll(game);
+      });
+
+      rows.appendChild(row);
     }
 
-    if (mod.bonusQualifications.length) {
-      const bonusRow = document.createElement('div');
-      bonusRow.className = 'pill-row';
-      for (const code of mod.bonusQualifications) {
-        const pill = document.createElement('span');
-        pill.className = 'pill';
-        pill.textContent = 'Bonus: ' + qualificationTitle(game, code);
-        bonusRow.appendChild(pill);
-      }
-      card.appendChild(bonusRow);
-    }
-
-    const workersLine = document.createElement('div');
-    workersLine.className = 'card-meta';
-    const workerNames = mod.workers
-      .map((id) => game.people.find((p) => p.id === id)?.name)
-      .filter(Boolean);
-    workersLine.textContent = workerNames.length ? `Arbeiter: ${workerNames.join(', ')}` : 'Keine zugewiesen';
-    card.appendChild(workersLine);
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.textContent = mod.active ? 'Deaktivieren' : 'Aktivieren';
-    toggleBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      toggleModuleActive(game, mod.id);
-      renderAll(game);
-    });
-    card.appendChild(toggleBtn);
-
-    card.addEventListener('click', () => {
-      game.selectedModuleId = mod.id;
-      renderAll(game);
-    });
-
+    card.appendChild(rows);
     moduleCardsEl.appendChild(card);
   }
 }
@@ -422,16 +474,33 @@ function renderPeopleList(game: GameState): void {
   peopleCardsEl.innerHTML = '';
   const selectedModule = game.modules.find((m) => m.id === game.selectedModuleId) || null;
 
-  for (const person of game.people) {
+  const filteredPeople = game.people.filter((p) => personMatchesFilter(p, peopleFilterTerm, game));
+  if (!filteredPeople.length) {
+    const empty = document.createElement('div');
+    empty.className = 'card card-meta';
+    empty.textContent = 'Keine Personen passend zum Filter.';
+    peopleCardsEl.appendChild(empty);
+    return;
+  }
+
+  for (const person of filteredPeople) {
     const card = document.createElement('div');
     card.className = 'card person-card';
+    card.addEventListener('click', (ev) => {
+      if ((ev.target as HTMLElement).tagName.toLowerCase() === 'button') return;
+      game.selectedPersonId = person.id;
+      game.screen = 'personDetail';
+      renderAll(game);
+    });
 
     const header = document.createElement('div');
     header.className = 'card-header';
     header.textContent = person.name;
     const status = document.createElement('span');
     status.className = 'person-status';
-    if (person.unavailableFor > 0) {
+    if (person.training) {
+      status.textContent = `Schulung (${person.training.remainingTicks} Ticks)`;
+    } else if (person.unavailableFor > 0) {
       status.textContent = `verhindert (${person.unavailableFor} Ticks)`;
     } else if (person.work) {
       const module = game.modules.find((m) => m.id === person.work);
@@ -461,6 +530,15 @@ function renderPeopleList(game: GameState): void {
       person.incomePerTick,
     )}`;
     card.appendChild(needs);
+
+    const detailBtn = document.createElement('button');
+    detailBtn.textContent = 'Details';
+    detailBtn.addEventListener('click', () => {
+      game.selectedPersonId = person.id;
+      game.screen = 'personDetail';
+      renderAll(game);
+    });
+    card.appendChild(detailBtn);
 
     const actionBtn = document.createElement('button');
 
@@ -497,6 +575,119 @@ function renderPeopleList(game: GameState): void {
     card.appendChild(actionBtn);
     peopleCardsEl.appendChild(card);
   }
+}
+
+function renderPersonDetail(game: GameState): void {
+  personDetailBodyEl.innerHTML = '';
+  if (!game.selectedPersonId) {
+    personDetailHeaderEl.textContent = 'Keine Person ausgewählt';
+    const info = document.createElement('div');
+    info.className = 'card-meta';
+    info.textContent = 'Wähle eine Person aus der Liste aus, um Details zu sehen.';
+    personDetailBodyEl.appendChild(info);
+    return;
+  }
+
+  const person = game.people.find((p) => p.id === game.selectedPersonId);
+  if (!person) {
+    personDetailHeaderEl.textContent = 'Unbekannte Person';
+    return;
+  }
+
+  personDetailHeaderEl.textContent = person.name;
+
+  const status = document.createElement('div');
+  status.className = 'card-meta';
+  const module = person.work ? getModuleById(game, person.work) : null;
+  const moduleName = module ? buildingTypeMap.get(module.typeId)?.name || module.typeId : 'kein Modul';
+  const statusText = person.training
+    ? `In Schulung (${person.training.remainingTicks} Ticks)`
+    : person.unavailableFor > 0
+      ? `Verhindert (${person.unavailableFor} Ticks)`
+      : person.work
+        ? `Aktiv in ${moduleName}`
+        : 'Nicht zugewiesen';
+  status.textContent = statusText;
+  personDetailBodyEl.appendChild(status);
+
+  const balance = document.createElement('div');
+  balance.className = 'card-meta';
+  balance.textContent = `Bedarf: ${formatResourceDeltaList(person.needsPerTick)} | Einkommen: ${formatResourceDeltaList(
+    person.incomePerTick,
+  )}`;
+  personDetailBodyEl.appendChild(balance);
+
+  const qualRow = document.createElement('div');
+  qualRow.className = 'pill-row';
+  if (person.qualifications.length) {
+    for (const code of person.qualifications) {
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.textContent = qualificationTitle(game, code);
+      qualRow.appendChild(pill);
+    }
+  } else {
+    const pill = document.createElement('span');
+    pill.className = 'pill';
+    pill.textContent = 'Keine Qualifikationen';
+    qualRow.appendChild(pill);
+  }
+  personDetailBodyEl.appendChild(qualRow);
+
+  const trainingBox = document.createElement('div');
+  trainingBox.className = 'card-meta';
+  trainingBox.textContent = person.training
+    ? `Aktuelle Schulung: ${qualificationTitle(game, person.training.qualificationCode)} (${person.training.remainingTicks} Ticks verbleibend)`
+    : 'Keine laufende Schulung';
+  personDetailBodyEl.appendChild(trainingBox);
+
+  const actions = document.createElement('div');
+  actions.className = 'detail-actions';
+  const learnHeader = document.createElement('div');
+  learnHeader.className = 'card-meta';
+  learnHeader.textContent = 'Schulung starten';
+  actions.appendChild(learnHeader);
+
+  const availableQualifications = game.qualifications.filter(
+    (q) => q.enabled && !person.qualifications.includes(q.code),
+  );
+
+  if (!availableQualifications.length) {
+    const none = document.createElement('div');
+    none.className = 'card-meta';
+    none.textContent = 'Keine weiteren Schulungen verfügbar.';
+    actions.appendChild(none);
+  } else {
+    for (const qual of availableQualifications) {
+      const row = document.createElement('div');
+      row.className = 'detail-train-row';
+      const label = document.createElement('div');
+      label.textContent = `${qual.title} (${qual.learningDuration} Ticks)`;
+      const cost = document.createElement('div');
+      cost.className = 'card-meta';
+      cost.textContent =
+        'Kosten: ' + (qual.costs.length ? formatResourceDeltaList(qual.costs) : 'keine');
+      const btn = document.createElement('button');
+      btn.textContent = 'Schulung';
+      btn.disabled = !!person.training;
+      if (person.training) {
+        btn.title = 'Person befindet sich bereits in einer Schulung.';
+      }
+      btn.addEventListener('click', () => {
+        const err = startTraining(game, person.id, qual.code);
+        if (err) {
+          game.messages.push(err);
+        }
+        renderAll(game);
+      });
+      row.appendChild(label);
+      row.appendChild(cost);
+      row.appendChild(btn);
+      actions.appendChild(row);
+    }
+  }
+
+  personDetailBodyEl.appendChild(actions);
 }
 
 function renderPopup(game: GameState): void {
@@ -575,9 +766,11 @@ export function renderAll(game: GameState): void {
   if (game.screen === 'build') {
     renderBuildMenu(game);
     renderGrid(game);
-  } else {
+  } else if (game.screen === 'personnel') {
     renderModuleList(game);
     renderPeopleList(game);
+  } else if (game.screen === 'personDetail') {
+    renderPersonDetail(game);
   }
   renderPopup(game);
   renderLog(game);
@@ -600,8 +793,13 @@ export function initUi(
   peopleCardsEl = document.getElementById('people-cards')!;
   buildScreenEl = document.getElementById('build-screen')!;
   personnelScreenEl = document.getElementById('personnel-screen')!;
+  personDetailScreenEl = document.getElementById('person-detail-screen')!;
   tabBuildBtn = document.getElementById('tab-build') as HTMLButtonElement;
   tabPersonnelBtn = document.getElementById('tab-personnel') as HTMLButtonElement;
+  peopleFilterInput = document.getElementById('people-filter') as HTMLInputElement;
+  personDetailHeaderEl = document.getElementById('person-detail-name')!;
+  personDetailBodyEl = document.getElementById('person-detail-body')!;
+  personDetailBackBtn = document.getElementById('person-detail-back') as HTMLButtonElement;
   onChooseEventOption = onConfirmEvent;
 
   tabBuildBtn.addEventListener('click', () => {
@@ -610,6 +808,17 @@ export function initUi(
   });
 
   tabPersonnelBtn.addEventListener('click', () => {
+    game.screen = 'personnel';
+    game.selectedPersonId = null;
+    renderAll(game);
+  });
+
+  peopleFilterInput.addEventListener('input', (ev) => {
+    peopleFilterTerm = (ev.target as HTMLInputElement).value;
+    renderAll(game);
+  });
+
+  personDetailBackBtn.addEventListener('click', () => {
     game.screen = 'personnel';
     renderAll(game);
   });
