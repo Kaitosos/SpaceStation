@@ -6,6 +6,7 @@ import {
   assignPersonToModule,
   removePersonFromModule,
   toggleModuleActive,
+  hasRequiredQualifications,
 } from './core';
 
 let resourcesEl: HTMLElement;
@@ -329,12 +330,7 @@ function renderScreenTabs(game: GameState): void {
 }
 
 function personCanWorkInModule(person: Person, module: ModuleState): boolean {
-  if (person.unavailableFor > 0) return false;
-  if (module.requiredQualifications.length) {
-    const hasAll = module.requiredQualifications.every((req) => person.qualifications.includes(req));
-    if (!hasAll) return false;
-  }
-  return true;
+  return person.unavailableFor <= 0 && hasRequiredQualifications(person, module);
 }
 
 function renderModuleList(game: GameState): void {

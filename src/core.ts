@@ -2,6 +2,7 @@
 import {
   ResourceDelta,
   ResourcesState,
+  ResourceState,
   ResourceConfig,
   Person,
   Grid,
@@ -152,6 +153,15 @@ export function addResourceChangesToDelta(
   }
 }
 
+function applyBoundedDelta(res: ResourceState, delta: number): void {
+  res.current += delta;
+  if (res.max !== undefined) {
+    res.current = Math.min(res.max, Math.max(0, res.current));
+  } else {
+    res.current = Math.max(0, res.current);
+  }
+}
+
 export function applyResourceDeltas(
   resources: ResourcesState,
   deltas: ResourceDelta[],
@@ -160,13 +170,7 @@ export function applyResourceDeltas(
   for (const d of deltas) {
     const res = resources[d.resource];
     if (!res || d.resource === 'population') continue;
-    res.current += sign * d.amount;
-    if (res.max !== undefined) {
-      if (res.current > res.max) res.current = res.max;
-      if (res.current < 0) res.current = 0;
-    } else {
-      if (res.current < 0) res.current = 0;
-    }
+    applyBoundedDelta(res, sign * d.amount);
   }
 }
 
@@ -394,7 +398,7 @@ export function placeBuildingAt(game: GameState, x: number, y: number): void {
   game.messages.push('Gebaut: ' + type.name);
 }
 
-function hasRequiredQualifications(person: Person, module: ModuleState): boolean {
+export function hasRequiredQualifications(person: Person, module: ModuleState): boolean {
   if (!module.requiredQualifications.length) return true;
   return module.requiredQualifications.every((req) => person.qualifications.includes(req));
 }
@@ -563,13 +567,7 @@ export function updateGameTick(game: GameState): void {
       continue; // wird unten gesetzt
     }
 
-    res.current += d;
-    if (res.max !== undefined) {
-      if (res.current > res.max) res.current = res.max;
-      if (res.current < 0) res.current = 0;
-    } else {
-      if (res.current < 0) res.current = 0;
-    }
+    applyBoundedDelta(res, d);
   }
 
   // Population aus people ableiten
