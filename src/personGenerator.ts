@@ -1,6 +1,6 @@
 // src/personGenerator.ts
-import { QUALIFICATION_CONFIGS } from './config';
-import { DataPoint, Person } from './types';
+import { QUALIFICATION_CONFIGS } from './config.js';
+import { DataPoint, Person } from './types.js';
 
 function randomFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];

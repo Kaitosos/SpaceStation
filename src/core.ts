@@ -17,14 +17,14 @@ import {
   Qualification,
   QuestFlagChange,
   QuestTimerChange,
-} from './types';
+} from './types.js';
 import {
   RESOURCE_CONFIGS,
   BUILDING_TYPES,
   EVENT_CONFIGS,
   QUALIFICATION_CONFIGS,
-} from './config';
-import { createInitialPeople, createRandomPerson } from './personGenerator';
+} from './config.js';
+import { createInitialPeople, createRandomPerson } from './personGenerator.js';
 
 export const BUILDING_TYPE_MAP = new Map(
   BUILDING_TYPES.map((t) => [t.id, t]),

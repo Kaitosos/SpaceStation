@@ -1,6 +1,6 @@
 // src/ui.ts
-import { DataPoint, EventOption, GameState, ResourceDelta, ModuleState, Person } from './types';
-import { BUILDING_TYPES } from './config';
+import { DataPoint, EventOption, GameState, ResourceDelta, ModuleState, Person } from './types.js';
+import { BUILDING_TYPES } from './config.js';
 import {
   placeBuildingAt,
   assignPersonToModule,
@@ -9,8 +9,8 @@ import {
   hasRequiredQualifications,
   startTraining,
   getModuleById,
-} from './core';
-import { translateValue } from './translationTables';
+} from './core.js';
+import { translateValue } from './translationTables.js';
 
 let resourcesEl: HTMLElement;
 let timeDisplayEl: HTMLElement;

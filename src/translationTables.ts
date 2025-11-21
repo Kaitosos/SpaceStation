@@ -1,5 +1,5 @@
 // src/translationTables.ts
-import { TranslationTable } from './types';
+import { TranslationTable } from './types.js';
 
 export const TRANSLATION_TABLES: TranslationTable[] = [
   {
