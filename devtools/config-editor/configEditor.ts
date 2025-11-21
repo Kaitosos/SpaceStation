@@ -4,7 +4,7 @@ import {
   EVENT_CONFIGS,
   QUALIFICATION_CONFIGS,
   RESOURCE_CONFIGS,
-} from '../../src/config';
+} from '../../src/config.js';
 import {
   BuildingType,
   Comparator,
@@ -19,8 +19,8 @@ import {
   TimeConditionConfig,
   TranslationTable,
   TranslationTableEntry,
-} from '../../src/types';
-import { TRANSLATION_TABLES } from '../../src/translationTables';
+} from '../../src/types.js';
+import { TRANSLATION_TABLES } from '../../src/translationTables.js';
 
 interface EditorState {
   resources: ResourceConfig[];
