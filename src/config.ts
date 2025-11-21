@@ -1,5 +1,5 @@
 // src/config.ts
-import { ResourceConfig, BuildingType, EventConfig, Qualification } from './types';
+import { ResourceConfig, BuildingType, EventConfig, Qualification } from './types.js';
 
 export const RESOURCE_CONFIGS: ResourceConfig[] = [
   {
