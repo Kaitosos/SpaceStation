@@ -35,6 +35,20 @@ export type ResourcesState = Record<ResourceName, ResourceState>;
 
 export type Comparator = 'lt' | 'lte' | 'gt' | 'gte' | 'eq' | 'neq';
 
+export interface QuestFlagConditionConfig {
+  type: 'questFlag';
+  flag: string;
+  comparator: Comparator;
+  value: number;
+}
+
+export interface QuestTimerConditionConfig {
+  type: 'questTimer';
+  timer: string;
+  comparator: Comparator;
+  value: number;
+}
+
 export interface ResourceConditionConfig {
   type: 'resource';
   resource: ResourceName;
@@ -48,7 +62,11 @@ export interface TimeConditionConfig {
   daysGte?: number;
 }
 
-export type ConditionConfig = ResourceConditionConfig | TimeConditionConfig;
+export type ConditionConfig =
+  | ResourceConditionConfig
+  | TimeConditionConfig
+  | QuestFlagConditionConfig
+  | QuestTimerConditionConfig;
 
 export interface EventConfig {
   id: string;
@@ -78,6 +96,20 @@ export interface EventOption {
   effects: ResourceDelta[];
   enableBuildings?: string[];
   enableQualifications?: string[];
+  questFlagChanges?: QuestFlagChange[];
+  questTimerChanges?: QuestTimerChange[];
+}
+
+export interface QuestFlagChange {
+  id: string;
+  op: 'set' | 'add' | 'delete';
+  value?: number;
+}
+
+export interface QuestTimerChange {
+  id: string;
+  op: 'set' | 'add' | 'delete';
+  value?: number;
 }
 
 export interface Person {
@@ -147,6 +179,8 @@ export interface GameState {
   grid: Grid;
   modules: ModuleState[];
   events: GameEventState[];
+  questFlags: Record<string, number>;
+  questTimers: Record<string, number>;
   activeEventPopup: ActiveEventPopup | null;
   selectedBuildingTypeId: string | null;
   selectedModuleId: string | null;

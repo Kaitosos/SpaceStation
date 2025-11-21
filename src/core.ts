@@ -14,6 +14,8 @@ import {
   Cell,
   ModuleState,
   Qualification,
+  QuestFlagChange,
+  QuestTimerChange,
 } from './types';
 import {
   RESOURCE_CONFIGS,
@@ -125,6 +127,8 @@ export function createInitialGameState(): GameState {
     grid,
     modules: [],
     events,
+    questFlags: {},
+    questTimers: {},
     activeEventPopup: null,
     selectedBuildingTypeId: null,
     selectedModuleId: null,
@@ -205,6 +209,14 @@ export function evaluateCondition(game: GameState, cond: ConditionConfig): boole
     const dayOk = cond.daysGte === undefined || game.days >= cond.daysGte;
     return tickOk && dayOk;
   }
+  if (cond.type === 'questFlag') {
+    const value = game.questFlags[cond.flag] ?? 0;
+    return checkComparator(value, cond.comparator, cond.value);
+  }
+  if (cond.type === 'questTimer') {
+    const value = game.questTimers[cond.timer] ?? 0;
+    return checkComparator(value, cond.comparator, cond.value);
+  }
   return false;
 }
 
@@ -237,6 +249,31 @@ export function applyEventOptionAndClose(
   if (!popup) return;
 
   applyResourceDeltas(game.resources, option.effects, +1);
+
+  const applyQuestChanges = (
+    changes: (QuestFlagChange | QuestTimerChange)[] | undefined,
+    store: Record<string, number>,
+  ): void => {
+    if (!changes) return;
+    for (const change of changes) {
+      const current = store[change.id] ?? 0;
+      if (change.op === 'delete') {
+        delete store[change.id];
+        continue;
+      }
+      const value = change.value ?? 0;
+      if (change.op === 'set') {
+        store[change.id] = value;
+        continue;
+      }
+      if (change.op === 'add') {
+        store[change.id] = current + value;
+      }
+    }
+  };
+
+  applyQuestChanges(option.questFlagChanges, game.questFlags);
+  applyQuestChanges(option.questTimerChanges, game.questTimers);
 
   if (option.enableBuildings && option.enableBuildings.length) {
     for (const id of option.enableBuildings) {
@@ -439,6 +476,12 @@ export function updateGameTick(game: GameState): void {
   game.ticks++;
   if (game.ticks % 40 === 0) {
     game.days++;
+  }
+
+  for (const timerId in game.questTimers) {
+    const value = game.questTimers[timerId];
+    if (value <= 0) continue;
+    game.questTimers[timerId] = Math.max(0, value - 1);
   }
 
   const resources = game.resources;
