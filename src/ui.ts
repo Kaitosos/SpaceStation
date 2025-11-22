@@ -29,6 +29,8 @@ let personDetailScreenEl: HTMLElement;
 let tabBuildBtn: HTMLButtonElement;
 let tabPersonnelBtn: HTMLButtonElement;
 let peopleFilterInput: HTMLInputElement;
+let unassignedFilterBtn: HTMLButtonElement;
+let moduleViewModeSelect: HTMLSelectElement;
 let personDetailHeaderEl: HTMLElement;
 let personDetailBodyEl: HTMLElement;
 let personDetailBackBtn: HTMLButtonElement;
@@ -36,6 +38,8 @@ let onChooseEventOption: ((option: EventOption) => void) | null = null;
 let selectedBuildTypeFilter: string | 'all' = 'all';
 let lastTimeDisplay = '';
 let peopleFilterTerm = '';
+let moduleListMode: 'modules' | 'tasks' = 'modules';
+let showUnassignedOnly = false;
 const resourceRows = new Map<
   string,
   {
@@ -361,11 +365,19 @@ function personMatchesFilter(person: Person, filter: string, game: GameState): b
 
 function renderModuleList(game: GameState): void {
   moduleCardsEl.innerHTML = '';
+  if (moduleViewModeSelect && moduleViewModeSelect.value !== moduleListMode) {
+    moduleViewModeSelect.value = moduleListMode;
+  }
   if (!game.modules.length) {
     const empty = document.createElement('div');
     empty.className = 'card card-meta';
     empty.textContent = 'Noch keine Module gebaut.';
     moduleCardsEl.appendChild(empty);
+    return;
+  }
+
+  if (moduleListMode === 'tasks') {
+    renderModuleTaskList(game);
     return;
   }
 
@@ -471,11 +483,99 @@ function renderModuleList(game: GameState): void {
   }
 }
 
+function renderModuleTaskList(game: GameState): void {
+  const modules = [...game.modules].sort((a, b) => {
+    const typeA = buildingTypeMap.get(a.typeId)?.name || a.typeId;
+    const typeB = buildingTypeMap.get(b.typeId)?.name || b.typeId;
+    const typeCompare = typeA.localeCompare(typeB);
+    if (typeCompare !== 0) return typeCompare;
+    return a.id.localeCompare(b.id);
+  });
+
+  for (const mod of modules) {
+    const type = buildingTypeMap.get(mod.typeId);
+    const card = document.createElement('div');
+    card.className = 'card module-card module-task-card';
+    card.classList.toggle('selected', game.selectedModuleId === mod.id);
+    card.classList.toggle('inactive', !mod.active);
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    header.textContent = `${type?.name || mod.typeId} (#${mod.id})`;
+
+    const status = document.createElement('span');
+    status.className = 'card-meta';
+    const freeSlots = Math.max((mod.workerMax ?? 0) - mod.workers.length, 0);
+    status.textContent = `${mod.active ? 'Aktiv' : 'Inaktiv'} • Freie Slots: ${freeSlots}/${mod.workerMax}`;
+    header.appendChild(status);
+    card.appendChild(header);
+
+    const location = document.createElement('div');
+    location.className = 'card-meta';
+    location.textContent = `Position: ${mod.x}/${mod.y}`;
+    card.appendChild(location);
+
+    if (mod.requiredQualifications.length || mod.bonusQualifications.length) {
+      const qualRow = document.createElement('div');
+      qualRow.className = 'pill-row';
+      for (const code of [...mod.requiredQualifications, ...mod.bonusQualifications]) {
+        const pill = document.createElement('span');
+        pill.className = 'pill';
+        pill.textContent = qualificationTitle(game, code);
+        qualRow.appendChild(pill);
+      }
+      card.appendChild(qualRow);
+    }
+
+    const workerLine = document.createElement('div');
+    workerLine.className = 'card-meta';
+    const workerNames = mod.workers
+      .map((id) => game.people.find((p) => p.id === id)?.name)
+      .filter(Boolean);
+    workerLine.textContent = workerNames.length
+      ? `Arbeiter: ${workerNames.join(', ')}`
+      : 'Keine Personen zugewiesen';
+    card.appendChild(workerLine);
+
+    const actions = document.createElement('div');
+    actions.className = 'module-row-actions';
+    const selectBtn = document.createElement('button');
+    selectBtn.textContent = 'Auswählen';
+    selectBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      game.selectedModuleId = mod.id;
+      renderAll(game);
+    });
+    const toggleBtn = document.createElement('button');
+    toggleBtn.textContent = mod.active ? 'Deaktivieren' : 'Aktivieren';
+    toggleBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      toggleModuleActive(game, mod.id);
+      renderAll(game);
+    });
+    actions.appendChild(selectBtn);
+    actions.appendChild(toggleBtn);
+    card.appendChild(actions);
+
+    card.addEventListener('click', () => {
+      game.selectedModuleId = mod.id;
+      renderAll(game);
+    });
+
+    moduleCardsEl.appendChild(card);
+  }
+}
+
 function renderPeopleList(game: GameState): void {
   peopleCardsEl.innerHTML = '';
+  if (unassignedFilterBtn) {
+    unassignedFilterBtn.classList.toggle('active', showUnassignedOnly);
+  }
   const selectedModule = game.modules.find((m) => m.id === game.selectedModuleId) || null;
 
-  const filteredPeople = game.people.filter((p) => personMatchesFilter(p, peopleFilterTerm, game));
+  const filteredPeople = game.people
+    .filter((p) => personMatchesFilter(p, peopleFilterTerm, game))
+    .filter((p) => !showUnassignedOnly || !p.work);
   if (!filteredPeople.length) {
     const empty = document.createElement('div');
     empty.className = 'card card-meta';
@@ -829,6 +929,8 @@ export function initUi(
   tabBuildBtn = document.getElementById('tab-build') as HTMLButtonElement;
   tabPersonnelBtn = document.getElementById('tab-personnel') as HTMLButtonElement;
   peopleFilterInput = document.getElementById('people-filter') as HTMLInputElement;
+  unassignedFilterBtn = document.getElementById('filter-unassigned') as HTMLButtonElement;
+  moduleViewModeSelect = document.getElementById('module-view-mode') as HTMLSelectElement;
   personDetailHeaderEl = document.getElementById('person-detail-name')!;
   personDetailBodyEl = document.getElementById('person-detail-body')!;
   personDetailBackBtn = document.getElementById('person-detail-back') as HTMLButtonElement;
@@ -847,6 +949,17 @@ export function initUi(
 
   peopleFilterInput.addEventListener('input', (ev) => {
     peopleFilterTerm = (ev.target as HTMLInputElement).value;
+    renderAll(game);
+  });
+
+  unassignedFilterBtn.addEventListener('click', () => {
+    showUnassignedOnly = !showUnassignedOnly;
+    unassignedFilterBtn.classList.toggle('active', showUnassignedOnly);
+    renderAll(game);
+  });
+
+  moduleViewModeSelect.addEventListener('change', (ev) => {
+    moduleListMode = (ev.target as HTMLSelectElement).value as typeof moduleListMode;
     renderAll(game);
   });
 
