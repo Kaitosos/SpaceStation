@@ -16,6 +16,13 @@ export { addResourceChangesToDelta, applyResourceDeltas, canAfford } from './res
 export { placeBuildingAt, toggleModuleActive } from './buildings.js';
 export { assignPersonToModule } from './workforce.js';
 export { evaluateCondition, areAllConditionsMet, checkEvents, applyEventOptionAndClose } from './events.js';
+export {
+  serializeGameState,
+  deserializeGameState,
+  saveGameStateToSlot,
+  loadGameStateFromSlot,
+  getSaveSlotKey,
+} from './storage.js';
 
 export function createInitialGameState(): GameState {
   const resources = createInitialResources();
