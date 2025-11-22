@@ -1,15 +1,8 @@
 // src/ui.ts
 import { DataPoint, EventOption, GameState, ResourceDelta, ModuleState, Person } from './types.js';
 import { BUILDING_TYPES } from './config.js';
-import {
-  placeBuildingAt,
-  assignPersonToModule,
-  removePersonFromModule,
-  toggleModuleActive,
-  hasRequiredQualifications,
-  startTraining,
-  getModuleById,
-} from './core.js';
+import { placeBuildingAt, toggleModuleActive, getModuleById } from './buildings.js';
+import { assignPersonToModule, hasRequiredQualifications, removePersonFromModule, startTraining } from './workforce.js';
 import { translateValue } from './translationTables.js';
 
 let resourcesEl: HTMLElement;
