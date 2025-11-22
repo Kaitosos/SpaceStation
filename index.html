@@ -33,6 +33,13 @@
       font-size: 14px;
     }
 
+    #time-area {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
     #resources {
       display: flex;
       gap: 12px;
@@ -93,6 +100,13 @@
 
     .screen.active {
       display: grid;
+    }
+
+    .ui-disabled {
+      filter: blur(2px);
+      pointer-events: none;
+      user-select: none;
+      opacity: 0.25;
     }
 
     #build-screen {
@@ -379,6 +393,82 @@
       margin-top: 4px;
     }
 
+    #main-menu {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(5, 5, 15, 0.9), rgba(0, 0, 0, 0.98));
+      z-index: 15;
+    }
+
+    #main-menu.hidden {
+      display: none;
+    }
+
+    .menu-panel {
+      background: linear-gradient(180deg, #14142b, #0a0a18);
+      border: 1px solid #50fa7b;
+      border-radius: 16px;
+      padding: 20px;
+      width: min(440px, 90vw);
+      box-shadow: 0 0 30px rgba(80, 250, 123, 0.35);
+      display: grid;
+      gap: 12px;
+      text-align: center;
+    }
+
+    .menu-title {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #50fa7b;
+    }
+
+    .menu-subtitle {
+      margin: 0;
+      color: #cfcff6;
+      opacity: 0.8;
+    }
+
+    .menu-actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    .menu-actions button {
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(80, 250, 123, 0.6);
+      background: rgba(20, 20, 40, 0.9);
+      color: inherit;
+      cursor: pointer;
+      font-size: 14px;
+      transition: border-color 0.1s ease, transform 0.05s ease, box-shadow 0.1s ease;
+    }
+
+    .menu-actions button:hover {
+      border-color: #8be9fd;
+      transform: translateY(-1px);
+      box-shadow: 0 0 12px rgba(139, 233, 253, 0.25);
+    }
+
+    .menu-actions button.primary {
+      background: linear-gradient(135deg, #50fa7b, #00f5ff);
+      color: #050510;
+      font-weight: 700;
+      box-shadow: 0 0 12px rgba(80, 250, 123, 0.35);
+      border-color: transparent;
+    }
+
+    .menu-secondary {
+      font-size: 12px;
+      color: #a5adc6;
+      opacity: 0.9;
+    }
+
     #personnel-screen {
       grid-template-columns: 1fr 1fr;
       grid-auto-rows: minmax(0, 1fr);
@@ -639,15 +729,18 @@
   </style>
 </head>
 <body>
-<div id="app">
-  <div id="hud">
-    <div id="resources"></div>
-    <div id="screen-tabs">
-      <button id="tab-build" class="tab-button active" data-screen="build">Bau</button>
-      <button id="tab-personnel" class="tab-button" data-screen="personnel">Personal</button>
+  <div id="app">
+    <div id="hud">
+      <div id="resources"></div>
+      <div id="screen-tabs">
+        <button id="tab-build" class="tab-button active" data-screen="build">Bau</button>
+        <button id="tab-personnel" class="tab-button" data-screen="personnel">Personal</button>
+      </div>
+      <div id="time-area">
+        <button id="menu-toggle" class="tab-button">Menü</button>
+        <div id="time-display"></div>
+      </div>
     </div>
-    <div id="time-display"></div>
-  </div>
 
   <div id="main">
     <div id="build-screen" class="screen active">
@@ -691,6 +784,21 @@
         </div>
         <div class="list" id="person-detail-body"></div>
       </div>
+    </div>
+  </div>
+
+  <div id="main-menu" class="hidden">
+    <div class="menu-panel">
+      <h1 class="menu-title">Space Station</h1>
+      <p class="menu-subtitle">Prototyp – Verwaltung deiner Orbitalbasis</p>
+      <div class="menu-actions">
+        <button id="menu-resume" class="primary">Fortsetzen</button>
+        <button id="menu-new">Neu</button>
+        <button id="menu-load">Laden</button>
+        <button id="menu-save">Speichern</button>
+        <button id="menu-options">Optionen</button>
+      </div>
+      <div class="menu-secondary">Tipps: Baue Energie- und Lebenserhaltung zuerst, um stabil zu starten.</div>
     </div>
   </div>
 

@@ -1,10 +1,13 @@
 // src/ui.ts
+import { createInitialGameState } from './core.js';
 import { DataPoint, EventOption, GameState, ResourceDelta, ModuleState, Person } from './types.js';
 import { BUILDING_TYPES } from './config.js';
 import { placeBuildingAt, toggleModuleActive, getModuleById } from './buildings.js';
 import { assignPersonToModule, hasRequiredQualifications, removePersonFromModule, startTraining } from './workforce.js';
 import { translateValue } from './translationTables.js';
 
+let hudEl: HTMLElement;
+let mainEl: HTMLElement;
 let resourcesEl: HTMLElement;
 let timeDisplayEl: HTMLElement;
 let buildMenuEl: HTMLElement;
@@ -21,6 +24,13 @@ let personnelScreenEl: HTMLElement;
 let personDetailScreenEl: HTMLElement;
 let tabBuildBtn: HTMLButtonElement;
 let tabPersonnelBtn: HTMLButtonElement;
+let menuToggleBtn: HTMLButtonElement;
+let menuOverlayEl: HTMLElement;
+let menuResumeBtn: HTMLButtonElement;
+let menuNewBtn: HTMLButtonElement;
+let menuLoadBtn: HTMLButtonElement;
+let menuSaveBtn: HTMLButtonElement;
+let menuOptionsBtn: HTMLButtonElement;
 let peopleFilterInput: HTMLInputElement;
 let unassignedFilterBtn: HTMLButtonElement;
 let moduleViewModeSelect: HTMLSelectElement;
@@ -33,6 +43,7 @@ let lastTimeDisplay = '';
 let peopleFilterTerm = '';
 let moduleListMode: 'modules' | 'tasks' = 'modules';
 let showUnassignedOnly = false;
+let lastGameplayScreen: Exclude<GameState['screen'], 'mainMenu'> = 'build';
 const resourceRows = new Map<
   string,
   {
@@ -49,6 +60,58 @@ let lastPopupState: string | null = null;
 let lastGridSize: { width: number; height: number } | null = null;
 const gridCellEls = new Map<string, HTMLElement>();
 const buildingTypeMap = new Map(BUILDING_TYPES.map((b) => [b.id, b]));
+
+function resetUiCaches(): void {
+  resourceRows.clear();
+  resourcesEl.innerHTML = '';
+  buildMenuEl.innerHTML = '';
+  gridEl.innerHTML = '';
+  moduleCardsEl.innerHTML = '';
+  peopleCardsEl.innerHTML = '';
+  personDetailBodyEl.innerHTML = '';
+  lastBuildMenuState = null;
+  lastPopupState = null;
+  lastGridSize = null;
+  lastTimeDisplay = '';
+  gridCellEls.clear();
+}
+
+function openMenu(game: GameState): void {
+  if (game.screen !== 'mainMenu' && game.screen !== undefined) {
+    if (game.screen === 'build' || game.screen === 'personnel' || game.screen === 'personDetail') {
+      lastGameplayScreen = game.screen;
+    }
+  }
+  game.screen = 'mainMenu';
+  game.paused = true;
+}
+
+function resumeGame(game: GameState): void {
+  game.paused = false;
+  game.screen = lastGameplayScreen;
+}
+
+function startNewGame(game: GameState): void {
+  const fresh = createInitialGameState();
+  lastGameplayScreen = 'build';
+  resetUiCaches();
+  selectedBuildTypeFilter = 'all';
+  showUnassignedOnly = false;
+  peopleFilterTerm = '';
+  moduleListMode = 'modules';
+  if (peopleFilterInput) {
+    peopleFilterInput.value = '';
+  }
+  if (unassignedFilterBtn) {
+    unassignedFilterBtn.classList.remove('active');
+  }
+  if (moduleViewModeSelect) {
+    moduleViewModeSelect.value = moduleListMode;
+  }
+  Object.assign(game, fresh);
+  game.paused = false;
+  game.screen = 'build';
+}
 
 function formatDelta(d: number): string {
   if (!d) return '±0/Tick';
@@ -327,15 +390,25 @@ function renderGrid(game: GameState): void {
   }
 }
 
-function renderScreenTabs(game: GameState): void {
+function renderScreenTabs(game: GameState, menuActive: boolean): void {
   const isBuild = game.screen === 'build';
   const isPersonnel = game.screen === 'personnel';
   const isPersonDetail = game.screen === 'personDetail';
-  buildScreenEl.classList.toggle('active', isBuild);
-  personnelScreenEl.classList.toggle('active', isPersonnel);
-  personDetailScreenEl.classList.toggle('active', isPersonDetail);
-  tabBuildBtn.classList.toggle('active', isBuild);
-  tabPersonnelBtn.classList.toggle('active', isPersonnel || isPersonDetail);
+
+  if (menuActive) {
+    buildScreenEl.classList.remove('active');
+    personnelScreenEl.classList.remove('active');
+    personDetailScreenEl.classList.remove('active');
+  } else {
+    buildScreenEl.classList.toggle('active', isBuild);
+    personnelScreenEl.classList.toggle('active', isPersonnel);
+    personDetailScreenEl.classList.toggle('active', isPersonDetail);
+  }
+
+  tabBuildBtn.classList.toggle('active', isBuild && !menuActive);
+  tabPersonnelBtn.classList.toggle('active', (isPersonnel || isPersonDetail) && !menuActive);
+  tabBuildBtn.disabled = menuActive;
+  tabPersonnelBtn.disabled = menuActive;
 }
 
 function personCanWorkInModule(person: Person, module: ModuleState): boolean {
@@ -584,6 +657,7 @@ function renderPeopleList(game: GameState): void {
       if ((ev.target as HTMLElement).tagName.toLowerCase() === 'button') return;
       game.selectedPersonId = person.id;
       game.screen = 'personDetail';
+      lastGameplayScreen = 'personDetail';
       renderAll(game);
     });
 
@@ -630,6 +704,7 @@ function renderPeopleList(game: GameState): void {
     detailBtn.addEventListener('click', () => {
       game.selectedPersonId = person.id;
       game.screen = 'personDetail';
+      lastGameplayScreen = 'personDetail';
       renderAll(game);
     });
     card.appendChild(detailBtn);
@@ -885,19 +960,38 @@ function renderLog(game: GameState): void {
   game.messages.length = 0;
 }
 
-export function renderAll(game: GameState): void {
-  renderScreenTabs(game);
-  renderResources(game);
-  if (game.screen === 'build') {
-    renderBuildMenu(game);
-    renderGrid(game);
-  } else if (game.screen === 'personnel') {
-    renderModuleList(game);
-    renderPeopleList(game);
-  } else if (game.screen === 'personDetail') {
-    renderPersonDetail(game);
+function renderMenuOverlay(game: GameState): boolean {
+  const menuActive = game.screen === 'mainMenu' || game.paused;
+  menuOverlayEl.classList.toggle('hidden', !menuActive);
+  hudEl.classList.toggle('ui-disabled', menuActive);
+  mainEl.classList.toggle('ui-disabled', menuActive);
+  logEl.classList.toggle('ui-disabled', menuActive);
+  if (menuActive) {
+    popupEl.classList.add('hidden');
+    lastPopupState = null;
   }
-  renderPopup(game);
+  return menuActive;
+}
+
+export function renderAll(game: GameState): void {
+  const menuActive = renderMenuOverlay(game);
+
+  renderScreenTabs(game, menuActive);
+  renderResources(game);
+
+  if (!menuActive) {
+    if (game.screen === 'build') {
+      renderBuildMenu(game);
+      renderGrid(game);
+    } else if (game.screen === 'personnel') {
+      renderModuleList(game);
+      renderPeopleList(game);
+    } else if (game.screen === 'personDetail') {
+      renderPersonDetail(game);
+    }
+    renderPopup(game);
+  }
+
   renderLog(game);
 }
 
@@ -905,6 +999,8 @@ export function initUi(
   game: GameState,
   onConfirmEvent: (option: EventOption) => void,
 ): void {
+  hudEl = document.getElementById('hud')!;
+  mainEl = document.getElementById('main')!;
   resourcesEl = document.getElementById('resources')!;
   timeDisplayEl = document.getElementById('time-display')!;
   buildMenuEl = document.getElementById('build-menu')!;
@@ -921,6 +1017,13 @@ export function initUi(
   personDetailScreenEl = document.getElementById('person-detail-screen')!;
   tabBuildBtn = document.getElementById('tab-build') as HTMLButtonElement;
   tabPersonnelBtn = document.getElementById('tab-personnel') as HTMLButtonElement;
+  menuToggleBtn = document.getElementById('menu-toggle') as HTMLButtonElement;
+  menuOverlayEl = document.getElementById('main-menu')!;
+  menuResumeBtn = document.getElementById('menu-resume') as HTMLButtonElement;
+  menuNewBtn = document.getElementById('menu-new') as HTMLButtonElement;
+  menuLoadBtn = document.getElementById('menu-load') as HTMLButtonElement;
+  menuSaveBtn = document.getElementById('menu-save') as HTMLButtonElement;
+  menuOptionsBtn = document.getElementById('menu-options') as HTMLButtonElement;
   peopleFilterInput = document.getElementById('people-filter') as HTMLInputElement;
   unassignedFilterBtn = document.getElementById('filter-unassigned') as HTMLButtonElement;
   moduleViewModeSelect = document.getElementById('module-view-mode') as HTMLSelectElement;
@@ -929,13 +1032,49 @@ export function initUi(
   personDetailBackBtn = document.getElementById('person-detail-back') as HTMLButtonElement;
   onChooseEventOption = onConfirmEvent;
 
+  menuToggleBtn.addEventListener('click', () => {
+    if (game.screen === 'mainMenu') {
+      resumeGame(game);
+    } else {
+      openMenu(game);
+    }
+    renderAll(game);
+  });
+
+  menuResumeBtn.addEventListener('click', () => {
+    resumeGame(game);
+    renderAll(game);
+  });
+
+  menuNewBtn.addEventListener('click', () => {
+    startNewGame(game);
+    renderAll(game);
+  });
+
+  menuLoadBtn.addEventListener('click', () => {
+    game.messages.push('Laden ist noch nicht implementiert.');
+    renderAll(game);
+  });
+
+  menuSaveBtn.addEventListener('click', () => {
+    game.messages.push('Speichern ist noch nicht implementiert.');
+    renderAll(game);
+  });
+
+  menuOptionsBtn.addEventListener('click', () => {
+    game.messages.push('Optionen sind noch nicht verfügbar.');
+    renderAll(game);
+  });
+
   tabBuildBtn.addEventListener('click', () => {
     game.screen = 'build';
+    lastGameplayScreen = 'build';
     renderAll(game);
   });
 
   tabPersonnelBtn.addEventListener('click', () => {
     game.screen = 'personnel';
+    lastGameplayScreen = 'personnel';
     game.selectedPersonId = null;
     renderAll(game);
   });
@@ -958,6 +1097,7 @@ export function initUi(
 
   personDetailBackBtn.addEventListener('click', () => {
     game.screen = 'personnel';
+    lastGameplayScreen = 'personnel';
     renderAll(game);
   });
 

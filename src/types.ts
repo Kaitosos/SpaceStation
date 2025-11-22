@@ -206,7 +206,8 @@ export interface GameState {
   selectedBuildingTypeId: string | null;
   selectedModuleId: string | null;
   selectedPersonId: string | null;
-  screen: 'build' | 'personnel' | 'personDetail';
+  screen: 'mainMenu' | 'build' | 'personnel' | 'personDetail';
+  paused: boolean;
   ticks: number;
   days: number;
   messages: string[]; // Log-Nachrichten aus der Logik

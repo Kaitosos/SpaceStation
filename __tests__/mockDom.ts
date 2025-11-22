@@ -132,6 +132,8 @@ class MockDocument {
 export function setupMockDom() {
   const document = new MockDocument();
   const ids = [
+    'hud',
+    'main',
     'resources',
     'time-display',
     'build-menu',
@@ -146,16 +148,30 @@ export function setupMockDom() {
     'build-screen',
     'personnel-screen',
     'person-detail-screen',
+    'main-menu',
     'person-detail-name',
     'person-detail-body',
   ];
 
-  const buttonIds = ['tab-build', 'tab-personnel', 'person-detail-back'];
+  const buttonIds = [
+    'tab-build',
+    'tab-personnel',
+    'person-detail-back',
+    'filter-unassigned',
+    'menu-toggle',
+    'menu-resume',
+    'menu-new',
+    'menu-load',
+    'menu-save',
+    'menu-options',
+  ];
   const inputIds = ['people-filter'];
+  const selectIds = ['module-view-mode'];
 
   ids.forEach((id) => document.createElementWithId('div', id));
   buttonIds.forEach((id) => document.createElementWithId('button', id));
   inputIds.forEach((id) => document.createElementWithId('input', id));
+  selectIds.forEach((id) => document.createElementWithId('select', id));
 
   const window: any = { document };
   (global as any).window = window;

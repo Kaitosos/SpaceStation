@@ -12,6 +12,11 @@ import { createInitialPeople } from './personGenerator.js';
 import { createInitialQualifications, hasRequiredQualifications, trySpawnNewPerson } from './workforce.js';
 import { GameState, Person } from './types.js';
 
+export { addResourceChangesToDelta, applyResourceDeltas, canAfford } from './resources.js';
+export { placeBuildingAt, toggleModuleActive } from './buildings.js';
+export { assignPersonToModule } from './workforce.js';
+export { evaluateCondition, areAllConditionsMet, checkEvents, applyEventOptionAndClose } from './events.js';
+
 export function createInitialGameState(): GameState {
   const resources = createInitialResources();
   const qualifications = createInitialQualifications();
@@ -37,7 +42,8 @@ export function createInitialGameState(): GameState {
     selectedBuildingTypeId: null,
     selectedModuleId: null,
     selectedPersonId: null,
-    screen: 'build',
+    screen: 'mainMenu',
+    paused: true,
     ticks: 0,
     days: 0,
     messages: [],
