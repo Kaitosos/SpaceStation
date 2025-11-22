@@ -12,7 +12,8 @@ initUi(game, (option) => {
 const TICK_MS = 500;
 
 setInterval(() => {
-  if (!game.activeEventPopup) {
+  const shouldTick = !game.activeEventPopup && game.screen !== 'mainMenu' && !game.paused;
+  if (shouldTick) {
     updateGameTick(game);
   }
   renderAll(game);

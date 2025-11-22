@@ -12,6 +12,11 @@ test('renderAll draws resources and grid with stable counts', () => {
   const { initUi } = require('../src/ui');
   initUi(game, () => {});
 
+  game.screen = 'build';
+  game.paused = false;
+  const { renderAll } = require('../src/ui');
+  renderAll(game);
+
   const resourceRows = document.getElementById('resources').children;
   assert.ok(resourceRows.length >= 3, 'renders visible resource rows');
 
@@ -28,6 +33,10 @@ test('grid click handler builds selected module and updates UI state', () => {
   delete require.cache[require.resolve('../src/ui')];
   const { initUi, renderAll } = require('../src/ui');
   initUi(game, () => {});
+
+  game.screen = 'build';
+  game.paused = false;
+  renderAll(game);
 
   const anchor = game.modules[0];
   const targetX = anchor.x + anchor.width;
