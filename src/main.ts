@@ -1,5 +1,6 @@
 // src/main.ts
-import { createInitialGameState, updateGameTick, applyEventOptionAndClose } from './core.js';
+import { createInitialGameState, updateGameTick } from './core.js';
+import { applyEventOptionAndClose } from './events.js';
 import { initUi, renderAll } from './ui.js';
 
 const game = createInitialGameState();
