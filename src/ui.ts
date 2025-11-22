@@ -40,6 +40,7 @@ let peopleFilterInput: HTMLInputElement;
 let unassignedFilterBtn: HTMLButtonElement;
 let moduleViewModeSelect: HTMLSelectElement;
 let personDetailHeaderEl: HTMLElement;
+let personDetailModuleEl: HTMLElement;
 let personDetailBodyEl: HTMLElement;
 let personDetailBackBtn: HTMLButtonElement;
 let onChooseEventOption: ((option: EventOption) => void) | null = null;
@@ -811,12 +812,23 @@ function renderPeopleList(game: GameState): void {
 
 function renderPersonDetail(game: GameState): void {
   personDetailBodyEl.innerHTML = '';
+  personDetailModuleEl.innerHTML = '';
   if (!game.selectedPersonId) {
     personDetailHeaderEl.textContent = 'Keine Person ausgewählt';
+    const section = document.createElement('section');
+    section.className = 'person-detail__section';
+    const title = document.createElement('h4');
+    title.className = 'section-title';
+    title.textContent = 'Details';
+    const placeholder = document.createElement('div');
+    placeholder.className = 'card person-detail__card';
     const info = document.createElement('div');
     info.className = 'card__meta';
     info.textContent = 'Wähle eine Person aus der Liste aus, um Details zu sehen.';
-    personDetailBodyEl.appendChild(info);
+    placeholder.appendChild(info);
+    section.appendChild(title);
+    section.appendChild(placeholder);
+    personDetailBodyEl.appendChild(section);
     return;
   }
 
@@ -827,65 +839,103 @@ function renderPersonDetail(game: GameState): void {
   }
 
   personDetailHeaderEl.textContent = person.name;
-
-  const status = document.createElement('div');
-  status.className = 'card__meta';
   const module = person.work ? getModuleById(game, person.work) : null;
   const moduleName = module ? buildingTypeMap.get(module.typeId)?.name || module.typeId : 'kein Modul';
-  const statusText = person.training
-    ? `In Schulung (${person.training.remainingTicks} Ticks)`
-    : person.unavailableFor > 0
-      ? `Verhindert (${person.unavailableFor} Ticks)`
-      : person.work
-        ? `Aktiv in ${moduleName}`
-        : 'Nicht zugewiesen';
-  status.textContent = statusText;
-  personDetailBodyEl.appendChild(status);
+  const moduleBadge = document.createElement('span');
+  moduleBadge.className = 'badge badge--info';
+  moduleBadge.textContent = person.work ? moduleName : 'Nicht zugewiesen';
+  personDetailModuleEl.appendChild(moduleBadge);
 
-  const balance = document.createElement('div');
-  balance.className = 'card__meta';
-  balance.textContent = `Bedarf: ${formatResourceDeltaList(person.needsPerTick)} | Einkommen: ${formatResourceDeltaList(
-    person.incomePerTick,
-  )}`;
-  personDetailBodyEl.appendChild(balance);
+  const createSection = (title: string): HTMLElement => {
+    const section = document.createElement('section');
+    section.className = 'person-detail__section';
+    const heading = document.createElement('h4');
+    heading.className = 'section-title';
+    heading.textContent = title;
+    section.appendChild(heading);
+    return section;
+  };
 
-  const dataHeader = document.createElement('div');
-  dataHeader.className = 'card__meta';
-  dataHeader.textContent = 'Persönliche Daten:';
-  personDetailBodyEl.appendChild(dataHeader);
+  const impactSection = createSection('Ressourcen-Impact');
+  const impactCard = document.createElement('div');
+  impactCard.className = 'card person-detail__card';
 
+  const statusRow = document.createElement('div');
+  statusRow.className = 'person-detail__status-row';
+
+  const statusBadge = document.createElement('span');
+  statusBadge.className = 'badge';
+  if (person.training) {
+    statusBadge.classList.add('badge--info');
+    statusBadge.textContent = `In Schulung (${person.training.remainingTicks} Ticks)`;
+  } else if (person.unavailableFor > 0) {
+    statusBadge.classList.add('badge--warn');
+    statusBadge.textContent = `Verhindert (${person.unavailableFor} Ticks)`;
+  } else if (person.work) {
+    statusBadge.classList.add('badge--success');
+    statusBadge.textContent = `Aktiv in ${moduleName}`;
+  } else {
+    statusBadge.textContent = 'Nicht zugewiesen';
+  }
+  statusRow.appendChild(statusBadge);
+
+  const balanceNeed = document.createElement('div');
+  balanceNeed.className = 'card__meta';
+  balanceNeed.textContent = `Bedarf pro Tick: ${formatResourceDeltaList(person.needsPerTick)}`;
+
+  const balanceIncome = document.createElement('div');
+  balanceIncome.className = 'card__meta';
+  balanceIncome.textContent = `Einkommen pro Tick: ${formatResourceDeltaList(person.incomePerTick)}`;
+
+  impactCard.appendChild(statusRow);
+  impactCard.appendChild(balanceNeed);
+  impactCard.appendChild(balanceIncome);
+  impactSection.appendChild(impactCard);
+
+  const dataSection = createSection('Persönliche Daten');
+  const dataCard = document.createElement('div');
+  dataCard.className = 'card person-detail__card';
   const dataList = document.createElement('div');
-  dataList.className = 'card';
-  dataList.classList.add('card__meta');
+  dataList.className = 'person-detail__list';
 
   const renderDataPoint = (dataPoint: DataPoint): HTMLElement => {
     const row = document.createElement('div');
-    row.className = 'card__meta';
+    row.className = 'person-detail__list-row';
+    const label = document.createElement('div');
+    label.className = 'person-detail__list-label';
+    label.textContent = dataPoint.name;
+    const value = document.createElement('div');
+    value.className = 'person-detail__list-value';
     const translated = dataPoint.translationTable
       ? translateValue(dataPoint.translationTable, dataPoint.value)
       : null;
-    const valueText = translated ? `${translated} (${dataPoint.value})` : String(dataPoint.value);
-    row.textContent = `${dataPoint.name}: ${valueText}`;
+    value.textContent = translated ? `${translated} (${dataPoint.value})` : String(dataPoint.value);
+    row.appendChild(label);
+    row.appendChild(value);
     return row;
   };
 
   if (person.personalData.length) {
     person.personalData.forEach((point) => dataList.appendChild(renderDataPoint(point)));
   } else {
-    const row = document.createElement('div');
-    row.className = 'card__meta';
-    row.textContent = 'Keine persönlichen Daten hinterlegt.';
-    dataList.appendChild(row);
+    const empty = document.createElement('div');
+    empty.className = 'card__meta';
+    empty.textContent = 'Keine persönlichen Daten hinterlegt.';
+    dataList.appendChild(empty);
   }
 
-  personDetailBodyEl.appendChild(dataList);
+  dataCard.appendChild(dataList);
+  dataSection.appendChild(dataCard);
 
+  const qualSection = createSection('Qualifikationen');
+  const qualCard = document.createElement('div');
+  qualCard.className = 'card person-detail__card';
   const qualRow = document.createElement('div');
   qualRow.className = 'badge-row';
   if (person.qualifications.length) {
     for (const code of person.qualifications) {
       const badge = document.createElement('span');
-      badge.className = 'badge';
+      badge.className = 'badge badge--success';
       badge.textContent = qualificationTitle(game, code);
       qualRow.appendChild(badge);
     }
@@ -895,63 +945,102 @@ function renderPersonDetail(game: GameState): void {
     badge.textContent = 'Keine Qualifikationen';
     qualRow.appendChild(badge);
   }
-  personDetailBodyEl.appendChild(qualRow);
+  qualCard.appendChild(qualRow);
+  qualSection.appendChild(qualCard);
 
-  const trainingBox = document.createElement('div');
-  trainingBox.className = 'card__meta';
-  trainingBox.textContent = person.training
-    ? `Aktuelle Schulung: ${qualificationTitle(game, person.training.qualificationCode)} (${person.training.remainingTicks} Ticks verbleibend)`
-    : 'Keine laufende Schulung';
-  personDetailBodyEl.appendChild(trainingBox);
+  const trainingSection = createSection('Schulung');
+  const trainingGrid = document.createElement('div');
+  trainingGrid.className = 'person-detail__training-grid';
 
-  const actions = document.createElement('div');
-  actions.className = 'detail-actions';
-  const learnHeader = document.createElement('div');
-  learnHeader.className = 'card__meta';
-  learnHeader.textContent = 'Schulung starten';
-  actions.appendChild(learnHeader);
+  if (person.training) {
+    const activeCard = document.createElement('div');
+    activeCard.className = 'card person-detail__card';
+    const header = document.createElement('div');
+    header.className = 'training-card__header';
+    const title = document.createElement('h4');
+    title.className = 'training-card__title';
+    title.textContent = 'Aktive Schulung';
+    const subtitle = document.createElement('p');
+    subtitle.className = 'training-card__subtitle';
+    subtitle.textContent = `${qualificationTitle(game, person.training.qualificationCode)} • ${person.training.remainingTicks} Ticks verbleibend`;
+    header.appendChild(title);
+    header.appendChild(subtitle);
+
+    const actions = document.createElement('div');
+    actions.className = 'card__actions';
+    const runningBtn = document.createElement('button');
+    runningBtn.className = 'btn btn--soft btn--pill';
+    runningBtn.textContent = 'Schulung läuft';
+    runningBtn.disabled = true;
+    actions.appendChild(runningBtn);
+
+    activeCard.appendChild(header);
+    activeCard.appendChild(actions);
+    trainingGrid.appendChild(activeCard);
+  }
 
   const availableQualifications = game.qualifications.filter(
     (q) => q.enabled && !person.qualifications.includes(q.code),
   );
 
-  if (!availableQualifications.length) {
+  if (!availableQualifications.length && !person.training) {
     const none = document.createElement('div');
-    none.className = 'card__meta';
-    none.textContent = 'Keine weiteren Schulungen verfügbar.';
-    actions.appendChild(none);
-  } else {
-    for (const qual of availableQualifications) {
-      const row = document.createElement('div');
-      row.className = 'detail-train-row';
-      const label = document.createElement('div');
-      label.textContent = `${qual.title} (${qual.learningDuration} Ticks)`;
-      const cost = document.createElement('div');
-      cost.className = 'card__meta';
-      cost.textContent =
-        'Kosten: ' + (qual.costs.length ? formatResourceDeltaList(qual.costs) : 'keine');
-      const btn = document.createElement('button');
-      btn.className = 'btn btn--ghost';
-      btn.textContent = 'Schulung';
-      btn.disabled = !!person.training;
-      if (person.training) {
-        btn.title = 'Person befindet sich bereits in einer Schulung.';
-      }
-      btn.addEventListener('click', () => {
-        const err = startTraining(game, person.id, qual.code);
-        if (err) {
-          game.messages.push(err);
-        }
-        renderAll(game);
-      });
-      row.appendChild(label);
-      row.appendChild(cost);
-      row.appendChild(btn);
-      actions.appendChild(row);
-    }
+    none.className = 'card person-detail__card';
+    const msg = document.createElement('div');
+    msg.className = 'card__meta';
+    msg.textContent = 'Keine Schulungen verfügbar.';
+    none.appendChild(msg);
+    trainingGrid.appendChild(none);
   }
 
-  personDetailBodyEl.appendChild(actions);
+  for (const qual of availableQualifications) {
+    const trainingCard = document.createElement('div');
+    trainingCard.className = 'card person-detail__card';
+    const header = document.createElement('div');
+    header.className = 'training-card__header';
+    const title = document.createElement('h4');
+    title.className = 'training-card__title';
+    title.textContent = qual.title;
+    const subtitle = document.createElement('p');
+    subtitle.className = 'training-card__subtitle';
+    subtitle.textContent = `${qual.learningDuration} Ticks`;
+    header.appendChild(title);
+    header.appendChild(subtitle);
+
+    const cost = document.createElement('div');
+    cost.className = 'card__meta';
+    cost.textContent = 'Kosten: ' + (qual.costs.length ? formatResourceDeltaList(qual.costs) : 'keine');
+
+    const actions = document.createElement('div');
+    actions.className = 'card__actions';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn--primary btn--pill';
+    btn.textContent = 'Schulung starten';
+    btn.disabled = !!person.training;
+    if (person.training) {
+      btn.title = 'Person befindet sich bereits in einer Schulung.';
+    }
+    btn.addEventListener('click', () => {
+      const err = startTraining(game, person.id, qual.code);
+      if (err) {
+        game.messages.push(err);
+      }
+      renderAll(game);
+    });
+    actions.appendChild(btn);
+
+    trainingCard.appendChild(header);
+    trainingCard.appendChild(cost);
+    trainingCard.appendChild(actions);
+    trainingGrid.appendChild(trainingCard);
+  }
+
+  trainingSection.appendChild(trainingGrid);
+
+  personDetailBodyEl.appendChild(impactSection);
+  personDetailBodyEl.appendChild(dataSection);
+  personDetailBodyEl.appendChild(qualSection);
+  personDetailBodyEl.appendChild(trainingSection);
 }
 
 function renderPopup(game: GameState): void {
@@ -1152,6 +1241,7 @@ export function initUi(
   unassignedFilterBtn = document.getElementById('filter-unassigned') as HTMLButtonElement;
   moduleViewModeSelect = document.getElementById('module-view-mode') as HTMLSelectElement;
   personDetailHeaderEl = document.getElementById('person-detail-name')!;
+  personDetailModuleEl = document.getElementById('person-detail-module')!;
   personDetailBodyEl = document.getElementById('person-detail-body')!;
   personDetailBackBtn = document.getElementById('person-detail-back') as HTMLButtonElement;
   onChooseEventOption = onConfirmEvent;
