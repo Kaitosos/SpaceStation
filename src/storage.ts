@@ -1,5 +1,6 @@
 // src/storage.ts
 import { GameState, ActiveEventPopup, Grid, ModuleState, Person, ResourceDelta, ResourcesState, GameEventState, Qualification, EventOption } from './types.js';
+import { syncModuleIdCounterFromModules } from './buildings.js';
 
 const SAVE_VERSION = 1;
 const SAVE_KEY_PREFIX = 'spacestation-save-slot-';
@@ -331,7 +332,9 @@ export function deserializeGameState(serialized: string): GameState {
     throw new Error('Save konnte nicht gelesen werden.');
   }
   const migrated = migrateSavePayload(parsed);
-  return sanitizeGameState(migrated.state);
+  const game = sanitizeGameState(migrated.state);
+  syncModuleIdCounterFromModules(game.modules);
+  return game;
 }
 
 export function getSaveSlotKey(slotId: string): string {

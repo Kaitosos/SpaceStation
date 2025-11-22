@@ -8,6 +8,7 @@ const {
   loadGameStateFromSlot,
   getSaveSlotKey,
 } = require('../src/storage');
+const { placeBuildingAt } = require('../src/buildings');
 
 function createMinimalGrid() {
   return { width: 1, height: 1, cells: [{ x: 0, y: 0, buildingTypeId: null, isRoot: true, moduleId: null }] };
@@ -157,4 +158,74 @@ test('loadGameStateFromSlot returns null and logs on corrupt save', () => {
   console.error = originalError;
   assert.strictEqual(result, null);
   assert.strictEqual(errorCalled, true);
+});
+
+test('deserializeGameState restores module ID counter so new builds increment correctly', () => {
+  const grid = { width: 6, height: 6, cells: [] };
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      grid.cells.push({ x, y, buildingTypeId: null, isRoot: false, moduleId: null });
+    }
+  }
+
+  // Existing module occupying a 2x2 area starting at (1,1)
+  const occupied = [
+    { x: 1, y: 1 },
+    { x: 2, y: 1 },
+    { x: 1, y: 2 },
+    { x: 2, y: 2 },
+  ];
+  for (const { x, y } of occupied) {
+    const idx = y * grid.width + x;
+    grid.cells[idx].buildingTypeId = 'generator';
+    grid.cells[idx].moduleId = 'm_010';
+    grid.cells[idx].isRoot = x === 1 && y === 1;
+  }
+
+  const payload = {
+    version: 1,
+    state: {
+      resources: {
+        money: { name: 'money', enabled: true, current: 1000, max: 1000, deltaPerTick: 0 },
+      },
+      people: [],
+      qualifications: [],
+      grid,
+      modules: [
+        {
+          id: 'm_010',
+          typeId: 'generator',
+          x: 1,
+          y: 1,
+          width: 2,
+          height: 2,
+          active: true,
+          requiredQualifications: [],
+          bonusQualifications: [],
+          workers: [],
+          workerMax: 2,
+        },
+      ],
+      events: [],
+      questFlags: {},
+      questTimers: {},
+      activeEventPopup: null,
+      selectedBuildingTypeId: 'generator',
+      selectedModuleId: null,
+      selectedPersonId: null,
+      screen: 'build',
+      paused: false,
+      ticks: 0,
+      days: 0,
+      messages: [],
+    },
+  };
+
+  const game = deserializeGameState(JSON.stringify(payload));
+
+  placeBuildingAt(game, 3, 1);
+
+  const newModule = game.modules.find((m) => m.id !== 'm_010');
+  assert.ok(newModule);
+  assert.strictEqual(newModule.id, 'm_011');
 });
