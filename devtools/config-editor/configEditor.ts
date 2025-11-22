@@ -24,6 +24,14 @@ import {
 import { TRANSLATION_TABLES } from '../../src/translationTables.js';
 import { createSuggestionLists } from './autocomplete.js';
 import { createConditionWizard } from './conditionWizard.js';
+import {
+  createValidationContext,
+  validateBuildings,
+  validateConditions,
+  validateQualifications,
+  validateResourceDeltas,
+  ValidationIssue,
+} from './validators.js';
 
 interface EditorState {
   resources: ResourceConfig[];
@@ -50,6 +58,7 @@ const cloneState = (): EditorState => ({
 
 const state: EditorState = cloneState();
 const suggestions = createSuggestionLists();
+let validationContext = createValidationContext(state.resources, state.buildings, state.qualifications);
 
 const selection: Record<TabKey, number> = {
   resources: 0,
@@ -85,6 +94,69 @@ const field = (
   }
 
   return wrapper;
+};
+
+const renderValidation = (
+  wrapper: HTMLElement,
+  input: HTMLInputElement | HTMLTextAreaElement,
+  issue: ValidationIssue | null,
+  applySuggestion?: (replacement: string) => void,
+): void => {
+  const existing = wrapper.querySelector('.devcfg-validation');
+  if (existing) existing.remove();
+
+  input.classList.toggle('devcfg-error', Boolean(issue));
+  if (!issue) return;
+
+  const hint = document.createElement('div');
+  hint.className = 'devcfg-validation';
+  hint.textContent =
+    issue.invalidValues.length === 1
+      ? `Ungültiger ${issue.type === 'resource' ? 'Ressourcenname' : issue.type === 'building' ? 'Gebäude-ID' : 'Qualifikationscode'}: ${
+          issue.invalidValues[0]
+        }`
+      : `Ungültige ${
+          issue.type === 'resource' ? 'Ressourcen' : issue.type === 'building' ? 'Gebäude-IDs' : 'Qualifikationscodes'
+        }: ${issue.invalidValues.join(', ')}`;
+
+  if (issue.suggestions.length && applySuggestion) {
+    const quickfix = document.createElement('div');
+    quickfix.className = 'devcfg-quickfix';
+
+    const label = document.createElement('span');
+    label.textContent = 'Quickfix:';
+    quickfix.appendChild(label);
+
+    const select = document.createElement('select');
+    issue.suggestions.forEach((value) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = value;
+      select.appendChild(option);
+    });
+    quickfix.appendChild(select);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Anwenden';
+    button.addEventListener('click', () => applySuggestion(select.value));
+    quickfix.appendChild(button);
+
+    hint.appendChild(quickfix);
+  }
+
+  wrapper.appendChild(hint);
+};
+
+const attachValidation = (
+  wrapper: HTMLElement,
+  input: HTMLInputElement | HTMLTextAreaElement,
+  compute: () => ValidationIssue | null,
+  applySuggestion?: (replacement: string) => void,
+): void => {
+  const update = (): void => renderValidation(wrapper, input, compute(), applySuggestion);
+  input.addEventListener('input', update);
+  update();
 };
 
 const datalistCache = new Map<string, HTMLDataListElement>();
@@ -205,6 +277,25 @@ const parseQuestChanges = (text: string): (QuestFlagChange | QuestTimerChange)[]
       return { id, op: operation, value: isNaN(parsedValue) ? 0 : parsedValue } as QuestFlagChange;
     });
 
+const formatConditions = (conditions: ConditionConfig[]): string =>
+  conditions
+    .map((cond) => {
+      if (cond.type === 'resource') {
+        return `resource:${cond.resource},${cond.comparator},${cond.value}`;
+      }
+      if (cond.type === 'questFlag') {
+        return `questFlag:${cond.flag},${cond.comparator},${cond.value}`;
+      }
+      if (cond.type === 'questTimer') {
+        return `questTimer:${cond.timer},${cond.comparator},${cond.value}`;
+      }
+      const parts = [] as string[];
+      if (cond.ticksGte !== undefined) parts.push(`ticksGte=${cond.ticksGte}`);
+      if (cond.daysGte !== undefined) parts.push(`daysGte=${cond.daysGte}`);
+      return `time:${parts.join(',') || 'ticksGte=0'}`;
+    })
+    .join('\n');
+
 const createResourceCard = (config: ResourceConfig, container: HTMLElement): void => {
   const card = document.createElement('div');
   card.className = 'devcfg-card';
@@ -267,65 +358,103 @@ const createBuildingCard = (building: BuildingType, container: HTMLElement): voi
       'Format: BreitexHöhe, z.B. 2x2',
     ),
   );
-  card.appendChild(
-    field(
-      'Kosten (resource:amount pro Zeile)',
-      (() => {
-        const area = document.createElement('textarea');
-        area.value = formatResourceDeltas(building.cost);
-        area.addEventListener('input', () => (building.cost = parseResourceDeltas(area.value)));
-        return area;
-      })(),
-    ),
+  const costArea = document.createElement('textarea');
+  costArea.value = formatResourceDeltas(building.cost);
+  costArea.addEventListener('input', () => (building.cost = parseResourceDeltas(costArea.value)));
+  const costField = field('Kosten (resource:amount pro Zeile)', costArea);
+  attachValidation(
+    costField,
+    costArea,
+    () => validateResourceDeltas(building.cost, validationContext),
+    (replacement) => {
+      const target = validateResourceDeltas(building.cost, validationContext)?.invalidValues[0];
+      if (!target) return;
+      building.cost = building.cost.map((delta) => (delta.resource === target ? { ...delta, resource: replacement } : delta));
+      costArea.value = formatResourceDeltas(building.cost);
+    },
   );
-  card.appendChild(
-    field(
-      'Tick-Effekte',
-      (() => {
-        const area = document.createElement('textarea');
-        area.value = formatResourceDeltas(building.perTick);
-        area.addEventListener('input', () => (building.perTick = parseResourceDeltas(area.value)));
-        return area;
-      })(),
-      'Positive oder negative Werte, pro Zeile ein Eintrag',
-    ),
+  card.appendChild(costField);
+
+  const perTickArea = document.createElement('textarea');
+  perTickArea.value = formatResourceDeltas(building.perTick);
+  perTickArea.addEventListener('input', () => (building.perTick = parseResourceDeltas(perTickArea.value)));
+  const perTickField = field('Tick-Effekte', perTickArea, 'Positive oder negative Werte, pro Zeile ein Eintrag');
+  attachValidation(
+    perTickField,
+    perTickArea,
+    () => validateResourceDeltas(building.perTick, validationContext),
+    (replacement) => {
+      const target = validateResourceDeltas(building.perTick, validationContext)?.invalidValues[0];
+      if (!target) return;
+      building.perTick = building.perTick.map((delta) =>
+        delta.resource === target ? { ...delta, resource: replacement } : delta,
+      );
+      perTickArea.value = formatResourceDeltas(building.perTick);
+    },
   );
-  card.appendChild(
-    field(
-      'Max-Bonus',
-      (() => {
-        const area = document.createElement('textarea');
-        area.value = formatResourceDeltas(building.maxBonus);
-        area.addEventListener('input', () => (building.maxBonus = parseResourceDeltas(area.value)));
-        return area;
-      })(),
-      'Steigert Max-Werte von Ressourcen',
-    ),
+  card.appendChild(perTickField);
+
+  const maxBonusArea = document.createElement('textarea');
+  maxBonusArea.value = formatResourceDeltas(building.maxBonus);
+  maxBonusArea.addEventListener('input', () => (building.maxBonus = parseResourceDeltas(maxBonusArea.value)));
+  const maxBonusField = field('Max-Bonus', maxBonusArea, 'Steigert Max-Werte von Ressourcen');
+  attachValidation(
+    maxBonusField,
+    maxBonusArea,
+    () => validateResourceDeltas(building.maxBonus, validationContext),
+    (replacement) => {
+      const target = validateResourceDeltas(building.maxBonus, validationContext)?.invalidValues[0];
+      if (!target) return;
+      building.maxBonus = building.maxBonus.map((delta) =>
+        delta.resource === target ? { ...delta, resource: replacement } : delta,
+      );
+      maxBonusArea.value = formatResourceDeltas(building.maxBonus);
+    },
   );
-  card.appendChild(
-    field(
-      'Benötigte Qualifikationen (code, Komma-getrennt)',
-      createTextInput((building.requiredQualifications ?? []).join(', '), (v) => {
-        const list = v
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        building.requiredQualifications = list;
-      }, 'qualifications'),
-    ),
+  card.appendChild(maxBonusField);
+  const requiredInput = createTextInput((building.requiredQualifications ?? []).join(', '), (v) => {
+    const list = v
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    building.requiredQualifications = list;
+  }, 'qualifications');
+  const requiredField = field('Benötigte Qualifikationen (code, Komma-getrennt)', requiredInput);
+  attachValidation(
+    requiredField,
+    requiredInput,
+    () => validateQualifications(building.requiredQualifications ?? [], validationContext),
+    (replacement) => {
+      const target = validateQualifications(building.requiredQualifications ?? [], validationContext)?.invalidValues[0];
+      if (!target) return;
+      const updated = (building.requiredQualifications ?? []).map((code) => (code === target ? replacement : code));
+      building.requiredQualifications = updated;
+      requiredInput.value = updated.join(', ');
+    },
   );
-  card.appendChild(
-    field(
-      'Bonus-Qualifikationen (code, Komma-getrennt)',
-      createTextInput((building.bonusQualifications ?? []).join(', '), (v) => {
-        const list = v
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        building.bonusQualifications = list;
-      }, 'qualifications'),
-    ),
+  card.appendChild(requiredField);
+
+  const bonusInput = createTextInput((building.bonusQualifications ?? []).join(', '), (v) => {
+    const list = v
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    building.bonusQualifications = list;
+  }, 'qualifications');
+  const bonusField = field('Bonus-Qualifikationen (code, Komma-getrennt)', bonusInput);
+  attachValidation(
+    bonusField,
+    bonusInput,
+    () => validateQualifications(building.bonusQualifications ?? [], validationContext),
+    (replacement) => {
+      const target = validateQualifications(building.bonusQualifications ?? [], validationContext)?.invalidValues[0];
+      if (!target) return;
+      const updated = (building.bonusQualifications ?? []).map((code) => (code === target ? replacement : code));
+      building.bonusQualifications = updated;
+      bonusInput.value = updated.join(', ');
+    },
   );
+  card.appendChild(bonusField);
 
   container.appendChild(card);
 };
@@ -337,17 +466,24 @@ const createQualificationCard = (qualification: Qualification, container: HTMLEl
   card.appendChild(field('Code', createTextInput(qualification.code, (v) => (qualification.code = v), 'qualifications')));
   card.appendChild(field('Titel', createTextInput(qualification.title, (v) => (qualification.title = v))));
   card.appendChild(field('Aktiv?', createCheckbox(qualification.enabled, (v) => (qualification.enabled = v))));
-  card.appendChild(
-    field(
-      'Kosten (resource:amount pro Zeile)',
-      (() => {
-        const area = document.createElement('textarea');
-        area.value = formatResourceDeltas(qualification.costs);
-        area.addEventListener('input', () => (qualification.costs = parseResourceDeltas(area.value)));
-        return area;
-      })(),
-    ),
+  const qualCostArea = document.createElement('textarea');
+  qualCostArea.value = formatResourceDeltas(qualification.costs);
+  qualCostArea.addEventListener('input', () => (qualification.costs = parseResourceDeltas(qualCostArea.value)));
+  const qualCostField = field('Kosten (resource:amount pro Zeile)', qualCostArea);
+  attachValidation(
+    qualCostField,
+    qualCostArea,
+    () => validateResourceDeltas(qualification.costs, validationContext),
+    (replacement) => {
+      const target = validateResourceDeltas(qualification.costs, validationContext)?.invalidValues[0];
+      if (!target) return;
+      qualification.costs = qualification.costs.map((delta) =>
+        delta.resource === target ? { ...delta, resource: replacement } : delta,
+      );
+      qualCostArea.value = formatResourceDeltas(qualification.costs);
+    },
   );
+  card.appendChild(qualCostField);
   card.appendChild(
     field(
       'Lernzeit',
@@ -403,23 +539,7 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
     'Bedingungen (pro Zeile z. B. resource:oxygen,lte,20 oder time:ticksGte=60 oder questFlag:flag_id,eq,1)',
   );
   const conditionArea = document.createElement('textarea');
-  conditionArea.value = event.conditions
-    .map((cond) => {
-      if (cond.type === 'resource') {
-        return `resource:${cond.resource},${cond.comparator},${cond.value}`;
-      }
-      if (cond.type === 'questFlag') {
-        return `questFlag:${cond.flag},${cond.comparator},${cond.value}`;
-      }
-      if (cond.type === 'questTimer') {
-        return `questTimer:${cond.timer},${cond.comparator},${cond.value}`;
-      }
-      const parts = [] as string[];
-      if (cond.ticksGte !== undefined) parts.push(`ticksGte=${cond.ticksGte}`);
-      if (cond.daysGte !== undefined) parts.push(`daysGte=${cond.daysGte}`);
-      return `time:${parts.join(',') || 'ticksGte=0'}`;
-    })
-    .join('\n');
+  conditionArea.value = formatConditions(event.conditions);
   conditionArea.addEventListener('input', () => {
     const parsed: ConditionConfig[] = conditionArea.value
       .split(/\n+/)
@@ -466,10 +586,24 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
           value: Number(value || 0),
         };
         return cond;
-      });
+    });
     event.conditions = parsed;
   });
-  card.appendChild(conditionArea);
+  const conditionField = field('Bedingungen', conditionArea);
+  attachValidation(
+    conditionField,
+    conditionArea,
+    () => validateConditions(event.conditions, validationContext),
+    (replacement) => {
+      const invalid = validateConditions(event.conditions, validationContext)?.invalidValues[0];
+      if (!invalid) return;
+      event.conditions = event.conditions.map((cond) =>
+        cond.type === 'resource' && cond.resource === invalid ? { ...cond, resource: replacement } : cond,
+      );
+      conditionArea.value = formatConditions(event.conditions);
+    },
+  );
+  card.appendChild(conditionField);
 
   addSubheading(card, 'Optionen');
   const nextOptionId = (): string => `option_${event.options.length + 1}`;
@@ -529,17 +663,24 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
         })(),
       ),
     );
-    optWrap.appendChild(
-      field(
-        'Effekte',
-        (() => {
-          const area = document.createElement('textarea');
-          area.value = formatResourceDeltas(option.effects || []);
-          area.addEventListener('input', () => (option.effects = parseResourceDeltas(area.value)));
-          return area;
-        })(),
-      ),
+    const effectsArea = document.createElement('textarea');
+    effectsArea.value = formatResourceDeltas(option.effects || []);
+    effectsArea.addEventListener('input', () => (option.effects = parseResourceDeltas(effectsArea.value)));
+    const effectsField = field('Effekte', effectsArea);
+    attachValidation(
+      effectsField,
+      effectsArea,
+      () => validateResourceDeltas(option.effects || [], validationContext),
+      (replacement) => {
+        const target = validateResourceDeltas(option.effects || [], validationContext)?.invalidValues[0];
+        if (!target) return;
+        option.effects = (option.effects || []).map((delta) =>
+          delta.resource === target ? { ...delta, resource: replacement } : delta,
+        );
+        effectsArea.value = formatResourceDeltas(option.effects || []);
+      },
     );
+    optWrap.appendChild(effectsField);
     optWrap.appendChild(
       field(
         'Quest-Flags (id,op,value pro Zeile)',
@@ -568,32 +709,53 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
         'op: set | add | delete',
       ),
     );
-    optWrap.appendChild(
-      field(
-        'Gebäude freischalten (ID, Komma-getrennt)',
-        createTextInput((option.enableBuildings ?? []).join(', '), (v) => {
-          const ids = v
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean);
-          option.enableBuildings = ids.length ? ids : undefined;
-        }, 'buildings'),
-        'Optional',
-      ),
+    const enableBuildingsInput = createTextInput((option.enableBuildings ?? []).join(', '), (v) => {
+      const ids = v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      option.enableBuildings = ids.length ? ids : undefined;
+    }, 'buildings');
+    const enableBuildingsField = field('Gebäude freischalten (ID, Komma-getrennt)', enableBuildingsInput, 'Optional');
+    attachValidation(
+      enableBuildingsField,
+      enableBuildingsInput,
+      () => validateBuildings(option.enableBuildings ?? [], validationContext),
+      (replacement) => {
+        const invalid = validateBuildings(option.enableBuildings ?? [], validationContext)?.invalidValues[0];
+        if (!invalid) return;
+        const updated = (option.enableBuildings ?? []).map((id) => (id === invalid ? replacement : id));
+        option.enableBuildings = updated.length ? updated : undefined;
+        enableBuildingsInput.value = updated.join(', ');
+      },
     );
-    optWrap.appendChild(
-      field(
-        'Qualifikationen freischalten (Code, Komma-getrennt)',
-        createTextInput((option.enableQualifications ?? []).join(', '), (v) => {
-          const ids = v
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean);
-          option.enableQualifications = ids.length ? ids : undefined;
-        }, 'qualifications'),
-        'Optional',
-      ),
+    optWrap.appendChild(enableBuildingsField);
+
+    const enableQualificationsInput = createTextInput((option.enableQualifications ?? []).join(', '), (v) => {
+      const ids = v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      option.enableQualifications = ids.length ? ids : undefined;
+    }, 'qualifications');
+    const enableQualificationsField = field(
+      'Qualifikationen freischalten (Code, Komma-getrennt)',
+      enableQualificationsInput,
+      'Optional',
     );
+    attachValidation(
+      enableQualificationsField,
+      enableQualificationsInput,
+      () => validateQualifications(option.enableQualifications ?? [], validationContext),
+      (replacement) => {
+        const invalid = validateQualifications(option.enableQualifications ?? [], validationContext)?.invalidValues[0];
+        if (!invalid) return;
+        const updated = (option.enableQualifications ?? []).map((id) => (id === invalid ? replacement : id));
+        option.enableQualifications = updated.length ? updated : undefined;
+        enableQualificationsInput.value = updated.join(', ');
+      },
+    );
+    optWrap.appendChild(enableQualificationsField);
 
     const deleteBtn = document.createElement('button');
     deleteBtn.textContent = 'Option entfernen';
@@ -742,6 +904,7 @@ const renderConfigEditor = (): void => {
   if (existing) existing.remove();
 
   ensureSelectionInRange();
+  validationContext = createValidationContext(state.resources, state.buildings, state.qualifications);
 
   const overlay = document.createElement('div');
   overlay.id = 'dev-config-editor';
@@ -1155,6 +1318,44 @@ const ensureStyles = (): void => {
     }
 
     .devcfg-helper { font-size: 12px; color: var(--devcfg-text-muted); }
+
+    .devcfg-validation {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--devcfg-danger);
+      background: rgba(244, 63, 94, 0.08);
+      color: var(--devcfg-danger);
+      font-size: 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .devcfg-quickfix {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .devcfg-quickfix select {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--devcfg-border);
+      border-radius: 8px;
+      color: var(--devcfg-text);
+      padding: 6px 8px;
+    }
+
+    .devcfg-quickfix button {
+      background: var(--devcfg-danger);
+      color: #fff;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .devcfg-quickfix button:hover { background: #f43f5e; }
 
     textarea.devcfg-input { min-height: 80px; font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace; resize: vertical; }
 
