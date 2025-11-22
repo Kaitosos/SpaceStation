@@ -31,3 +31,7 @@ npm install
 3. Run the automated tests (if desired): `npm test`.
 
 The compiled JavaScript outputs are emitted to the `dist` directories defined by each TypeScript configuration.
+
+## Documentation
+- [Architecture overview](docs/architecture.md)
+- [UI screens (Build, Personnel, Details, Main Menu)](docs/ui-screens.md)
