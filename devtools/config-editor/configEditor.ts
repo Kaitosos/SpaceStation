@@ -21,6 +21,7 @@ import {
   TranslationTableEntry,
 } from '../../src/types.js';
 import { TRANSLATION_TABLES } from '../../src/translationTables.js';
+import { createSuggestionLists } from './autocomplete.js';
 
 interface EditorState {
   resources: ResourceConfig[];
@@ -46,6 +47,7 @@ const cloneState = (): EditorState => ({
 });
 
 const state: EditorState = cloneState();
+const suggestions = createSuggestionLists();
 
 const selection: Record<TabKey, number> = {
   resources: 0,
@@ -83,14 +85,47 @@ const field = (
   return wrapper;
 };
 
+const datalistCache = new Map<string, HTMLDataListElement>();
+
+const attachSuggestions = (input: HTMLInputElement, key: string, values: string[]): void => {
+  if (!values.length) return;
+
+  let list = datalistCache.get(key);
+  if (!list) {
+    list = document.createElement('datalist');
+    list.id = `devcfg-${key}`;
+    document.body.appendChild(list);
+    datalistCache.set(key, list);
+  }
+
+  list.innerHTML = '';
+  values.forEach((value) => {
+    const option = document.createElement('option');
+    option.value = value;
+    list?.appendChild(option);
+  });
+
+  input.setAttribute('list', list.id);
+};
+
 const createTextInput = (
   value: string,
   onChange: (val: string) => void,
+  autocompleteKey?: string,
 ): HTMLInputElement => {
   const input = document.createElement('input');
   input.type = 'text';
   input.value = value;
   input.addEventListener('input', () => onChange(input.value));
+  if (autocompleteKey) {
+    const values =
+      autocompleteKey === 'resources'
+        ? suggestions.resourceNames
+        : autocompleteKey === 'buildings'
+          ? suggestions.buildingIds
+          : suggestions.qualificationCodes;
+    attachSuggestions(input, autocompleteKey, values);
+  }
   return input;
 };
 
@@ -172,7 +207,7 @@ const createResourceCard = (config: ResourceConfig, container: HTMLElement): voi
   const card = document.createElement('div');
   card.className = 'devcfg-card';
 
-  card.appendChild(field('Name', createTextInput(config.name, (v) => (config.name = v))));
+  card.appendChild(field('Name', createTextInput(config.name, (v) => (config.name = v), 'resources')));
   card.appendChild(
     field('Hat Maximum?', createCheckbox(config.hasMax, (v) => (config.hasMax = v)), 'Max-Wert steuerbar?'),
   );
@@ -274,7 +309,7 @@ const createBuildingCard = (building: BuildingType, container: HTMLElement): voi
           .map((s) => s.trim())
           .filter(Boolean);
         building.requiredQualifications = list;
-      }),
+      }, 'qualifications'),
     ),
   );
   card.appendChild(
@@ -286,7 +321,7 @@ const createBuildingCard = (building: BuildingType, container: HTMLElement): voi
           .map((s) => s.trim())
           .filter(Boolean);
         building.bonusQualifications = list;
-      }),
+      }, 'qualifications'),
     ),
   );
 
@@ -297,7 +332,7 @@ const createQualificationCard = (qualification: Qualification, container: HTMLEl
   const card = document.createElement('div');
   card.className = 'devcfg-card';
 
-  card.appendChild(field('Code', createTextInput(qualification.code, (v) => (qualification.code = v))));
+  card.appendChild(field('Code', createTextInput(qualification.code, (v) => (qualification.code = v), 'qualifications')));
   card.appendChild(field('Titel', createTextInput(qualification.title, (v) => (qualification.title = v))));
   card.appendChild(field('Aktiv?', createCheckbox(qualification.enabled, (v) => (qualification.enabled = v))));
   card.appendChild(
@@ -480,7 +515,7 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
             .map((s) => s.trim())
             .filter(Boolean);
           option.enableBuildings = ids.length ? ids : undefined;
-        }),
+        }, 'buildings'),
         'Optional',
       ),
     );
@@ -493,7 +528,7 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
             .map((s) => s.trim())
             .filter(Boolean);
           option.enableQualifications = ids.length ? ids : undefined;
-        }),
+        }, 'qualifications'),
         'Optional',
       ),
     );

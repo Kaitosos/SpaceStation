@@ -5,6 +5,7 @@
     "rootDir": "."
   },
   "include": [
+    "devtools/config-editor/autocomplete.ts",
     "devtools/config-editor/configEditor.ts",
     "src/config.ts",
     "src/types.ts",
