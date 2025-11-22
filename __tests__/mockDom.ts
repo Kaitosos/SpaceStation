@@ -149,6 +149,8 @@ export function setupMockDom() {
     'personnel-screen',
     'person-detail-screen',
     'main-menu',
+    'menu-slot-list',
+    'menu-slot-timestamp',
     'person-detail-name',
     'person-detail-body',
   ];
@@ -166,7 +168,7 @@ export function setupMockDom() {
     'menu-options',
   ];
   const inputIds = ['people-filter'];
-  const selectIds = ['module-view-mode'];
+  const selectIds = ['module-view-mode', 'menu-slot-select'];
 
   ids.forEach((id) => document.createElementWithId('div', id));
   buttonIds.forEach((id) => document.createElementWithId('button', id));

@@ -2,9 +2,11 @@
 import { createInitialGameState } from './core.js';
 import { DataPoint, EventOption, GameState, ResourceDelta, ModuleState, Person } from './types.js';
 import { BUILDING_TYPES } from './config.js';
-import { placeBuildingAt, toggleModuleActive, getModuleById } from './buildings.js';
+import { placeBuildingAt, toggleModuleActive, getModuleById, rebuildGridFromModules } from './buildings.js';
 import { assignPersonToModule, hasRequiredQualifications, removePersonFromModule, startTraining } from './workforce.js';
 import { translateValue } from './translationTables.js';
+import { loadGameStateFromSlot, saveGameStateToSlot, getSaveSlotInfo, SaveSlotInfo } from './storage.js';
+import { recalcResourceMaximums } from './resources.js';
 
 let hudEl: HTMLElement;
 let mainEl: HTMLElement;
@@ -31,6 +33,9 @@ let menuNewBtn: HTMLButtonElement;
 let menuLoadBtn: HTMLButtonElement;
 let menuSaveBtn: HTMLButtonElement;
 let menuOptionsBtn: HTMLButtonElement;
+let slotSelectEl: HTMLSelectElement;
+let slotListEl: HTMLElement;
+let slotTimestampEl: HTMLElement;
 let peopleFilterInput: HTMLInputElement;
 let unassignedFilterBtn: HTMLButtonElement;
 let moduleViewModeSelect: HTMLSelectElement;
@@ -44,6 +49,9 @@ let peopleFilterTerm = '';
 let moduleListMode: 'modules' | 'tasks' = 'modules';
 let showUnassignedOnly = false;
 let lastGameplayScreen: Exclude<GameState['screen'], 'mainMenu'> = 'build';
+const SAVE_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'];
+let selectedSaveSlot = SAVE_SLOT_IDS[0];
+let slotLoadErrorLogged = false;
 const resourceRows = new Map<
   string,
   {
@@ -76,6 +84,35 @@ function resetUiCaches(): void {
   gridCellEls.clear();
 }
 
+function formatTimestamp(ms: number | null): string {
+  if (!ms) return 'Leer';
+  const date = new Date(ms);
+  return date.toLocaleString('de-DE');
+}
+
+function applyNewGameState(game: GameState, nextState: GameState): void {
+  resetUiCaches();
+  selectedBuildTypeFilter = 'all';
+  showUnassignedOnly = false;
+  peopleFilterTerm = '';
+  moduleListMode = 'modules';
+  if (peopleFilterInput) {
+    peopleFilterInput.value = '';
+  }
+  if (unassignedFilterBtn) {
+    unassignedFilterBtn.classList.remove('active');
+  }
+  if (moduleViewModeSelect) {
+    moduleViewModeSelect.value = moduleListMode;
+  }
+  Object.assign(game, nextState);
+  rebuildGridFromModules(game);
+  recalcResourceMaximums(game);
+  lastGameplayScreen = game.screen === 'mainMenu' ? 'build' : game.screen;
+  game.screen = lastGameplayScreen;
+  game.paused = false;
+}
+
 function openMenu(game: GameState): void {
   if (game.screen !== 'mainMenu' && game.screen !== undefined) {
     if (game.screen === 'build' || game.screen === 'personnel' || game.screen === 'personDetail') {
@@ -93,24 +130,41 @@ function resumeGame(game: GameState): void {
 
 function startNewGame(game: GameState): void {
   const fresh = createInitialGameState();
-  lastGameplayScreen = 'build';
-  resetUiCaches();
-  selectedBuildTypeFilter = 'all';
-  showUnassignedOnly = false;
-  peopleFilterTerm = '';
-  moduleListMode = 'modules';
-  if (peopleFilterInput) {
-    peopleFilterInput.value = '';
+  applyNewGameState(game, fresh);
+  game.messages.push('Neues Spiel gestartet.');
+}
+
+function saveCurrentSlot(game: GameState): void {
+  try {
+    saveGameStateToSlot(selectedSaveSlot, game);
+    const info = getSaveSlotInfo(selectedSaveSlot);
+    game.messages.push(
+      `Spielstand in ${slotLabel(selectedSaveSlot)} gespeichert (${formatTimestamp(info.savedAt ?? null)}).`,
+    );
+  } catch (error) {
+    console.error('Speichern fehlgeschlagen:', error);
+    game.messages.push('Speichern fehlgeschlagen. Siehe Konsole für Details.');
   }
-  if (unassignedFilterBtn) {
-    unassignedFilterBtn.classList.remove('active');
+  renderAll(game);
+}
+
+function loadSelectedSlot(game: GameState): void {
+  try {
+    const loaded = loadGameStateFromSlot(selectedSaveSlot);
+    if (!loaded) {
+      game.messages.push(`${slotLabel(selectedSaveSlot)} ist leer oder konnte nicht gelesen werden.`);
+      renderAll(game);
+      return;
+    }
+    applyNewGameState(game, loaded);
+    const info = getSaveSlotInfo(selectedSaveSlot);
+    const timeLabel = formatTimestamp(info.savedAt ?? null);
+    game.messages.push(`Spielstand aus ${slotLabel(selectedSaveSlot)} geladen (${timeLabel}).`);
+  } catch (error) {
+    console.error('Laden fehlgeschlagen:', error);
+    game.messages.push('Laden fehlgeschlagen. Siehe Konsole für Details.');
   }
-  if (moduleViewModeSelect) {
-    moduleViewModeSelect.value = moduleListMode;
-  }
-  Object.assign(game, fresh);
-  game.paused = false;
-  game.screen = 'build';
+  renderAll(game);
 }
 
 function formatDelta(d: number): string {
@@ -960,6 +1014,62 @@ function renderLog(game: GameState): void {
   game.messages.length = 0;
 }
 
+function slotLabel(slotId: string): string {
+  const idx = SAVE_SLOT_IDS.indexOf(slotId);
+  return idx >= 0 ? `Slot ${idx + 1}` : slotId;
+}
+
+function renderSaveSlots(): void {
+  if (!slotSelectEl || !slotListEl || !slotTimestampEl) return;
+
+  let slotInfos: SaveSlotInfo[];
+  try {
+    slotInfos = SAVE_SLOT_IDS.map((slotId) => getSaveSlotInfo(slotId));
+  } catch (error) {
+    slotLoadErrorLogged = true;
+    slotInfos = SAVE_SLOT_IDS.map((slotId) => ({ slotId, savedAt: null, hasData: false }));
+  }
+  const knownIds = new Set(SAVE_SLOT_IDS);
+  if (!knownIds.has(selectedSaveSlot)) {
+    selectedSaveSlot = SAVE_SLOT_IDS[0];
+  }
+
+  slotSelectEl.innerHTML = '';
+  for (const info of slotInfos) {
+    const opt = document.createElement('option');
+    opt.value = info.slotId;
+    opt.textContent = `${slotLabel(info.slotId)} – ${info.hasData ? formatTimestamp(info.savedAt) : 'Leer'}`;
+    slotSelectEl.appendChild(opt);
+  }
+  slotSelectEl.value = selectedSaveSlot;
+
+  slotListEl.innerHTML = '';
+  for (const info of slotInfos) {
+    const row = document.createElement('div');
+    row.className = 'slot-entry';
+    row.classList.toggle('selected', info.slotId === selectedSaveSlot);
+
+    const title = document.createElement('div');
+    title.className = 'slot-title';
+    title.textContent = slotLabel(info.slotId);
+
+    const meta = document.createElement('div');
+    meta.className = 'slot-meta';
+    meta.textContent = info.hasData ? `Stand: ${formatTimestamp(info.savedAt)}` : 'Noch kein Spielstand';
+
+    row.appendChild(title);
+    row.appendChild(meta);
+    slotListEl.appendChild(row);
+  }
+
+  const currentSlot = slotInfos.find((info) => info.slotId === selectedSaveSlot);
+  slotTimestampEl.textContent = currentSlot?.hasData
+    ? `Ausgewählt: ${formatTimestamp(currentSlot.savedAt)}`
+    : 'Ausgewählt: Leer';
+
+  menuLoadBtn.disabled = !currentSlot?.hasData;
+}
+
 function renderMenuOverlay(game: GameState): boolean {
   const menuActive = game.screen === 'mainMenu' || game.paused;
   menuOverlayEl.classList.toggle('hidden', !menuActive);
@@ -975,6 +1085,7 @@ function renderMenuOverlay(game: GameState): boolean {
 
 export function renderAll(game: GameState): void {
   const menuActive = renderMenuOverlay(game);
+  renderSaveSlots();
 
   renderScreenTabs(game, menuActive);
   renderResources(game);
@@ -1024,6 +1135,9 @@ export function initUi(
   menuLoadBtn = document.getElementById('menu-load') as HTMLButtonElement;
   menuSaveBtn = document.getElementById('menu-save') as HTMLButtonElement;
   menuOptionsBtn = document.getElementById('menu-options') as HTMLButtonElement;
+  slotSelectEl = document.getElementById('menu-slot-select') as HTMLSelectElement;
+  slotListEl = document.getElementById('menu-slot-list')!;
+  slotTimestampEl = document.getElementById('menu-slot-timestamp')!;
   peopleFilterInput = document.getElementById('people-filter') as HTMLInputElement;
   unassignedFilterBtn = document.getElementById('filter-unassigned') as HTMLButtonElement;
   moduleViewModeSelect = document.getElementById('module-view-mode') as HTMLSelectElement;
@@ -1052,13 +1166,11 @@ export function initUi(
   });
 
   menuLoadBtn.addEventListener('click', () => {
-    game.messages.push('Laden ist noch nicht implementiert.');
-    renderAll(game);
+    loadSelectedSlot(game);
   });
 
   menuSaveBtn.addEventListener('click', () => {
-    game.messages.push('Speichern ist noch nicht implementiert.');
-    renderAll(game);
+    saveCurrentSlot(game);
   });
 
   menuOptionsBtn.addEventListener('click', () => {
@@ -1098,6 +1210,11 @@ export function initUi(
   personDetailBackBtn.addEventListener('click', () => {
     game.screen = 'personnel';
     lastGameplayScreen = 'personnel';
+    renderAll(game);
+  });
+
+  slotSelectEl.addEventListener('change', (ev) => {
+    selectedSaveSlot = (ev.target as HTMLSelectElement).value;
     renderAll(game);
   });
 
