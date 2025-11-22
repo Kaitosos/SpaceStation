@@ -19,9 +19,11 @@ import {
   TimeConditionConfig,
   TranslationTable,
   TranslationTableEntry,
+  EventOption,
 } from '../../src/types.js';
 import { TRANSLATION_TABLES } from '../../src/translationTables.js';
 import { createSuggestionLists } from './autocomplete.js';
+import { createConditionWizard } from './conditionWizard.js';
 
 interface EditorState {
   resources: ResourceConfig[];
@@ -357,6 +359,17 @@ const createQualificationCard = (qualification: Qualification, container: HTMLEl
   container.appendChild(card);
 };
 
+const createDefaultOption = (id: string): EventOption => ({
+  id,
+  text: 'Neue Option',
+  explanation: '',
+  effects: [],
+  enableBuildings: [],
+  enableQualifications: [],
+  questFlagChanges: [],
+  questTimerChanges: [],
+});
+
 const createEventCard = (event: EventConfig, container: HTMLElement): void => {
   const card = document.createElement('div');
   card.className = 'devcfg-card';
@@ -375,6 +388,15 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
     ),
   );
   card.appendChild(field('Einmalig?', createCheckbox(Boolean(event.once), (v) => (event.once = v))));
+
+  const conditionWizard = createConditionWizard({
+    onAdd: (condition) => {
+      event.conditions.push(condition);
+      renderConfigEditor();
+    },
+    resourceSuggestions: suggestions.resourceNames,
+  });
+  card.appendChild(conditionWizard);
 
   addSubheading(
     card,
@@ -450,6 +472,46 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
   card.appendChild(conditionArea);
 
   addSubheading(card, 'Optionen');
+  const nextOptionId = (): string => `option_${event.options.length + 1}`;
+  const optionSnippets: { label: string; create: () => EventOption }[] = [
+    {
+      label: 'Basis-Option mit Freischaltungen',
+      create: () => createDefaultOption(nextOptionId()),
+    },
+    {
+      label: 'Quest-Option mit Standardwerten',
+      create: () => ({
+        ...createDefaultOption(nextOptionId()),
+        text: 'Quest-Update',
+        questFlagChanges: [{ id: 'quest_flag', op: 'set', value: 0 }],
+        questTimerChanges: [{ id: 'quest_timer', op: 'set', value: 0 }],
+      }),
+    },
+  ];
+
+  const snippetWrap = document.createElement('div');
+  snippetWrap.className = 'devcfg-card';
+  const snippetTitle = document.createElement('h4');
+  snippetTitle.textContent = 'Option-Snippets';
+  snippetWrap.appendChild(snippetTitle);
+
+  const snippetHint = document.createElement('p');
+  snippetHint.textContent = 'Fügt Optionen mit vorausgefüllten Effekten, Freischaltungen und Quest-Änderungen hinzu.';
+  snippetWrap.appendChild(snippetHint);
+
+  const snippetButtons = document.createElement('div');
+  snippetButtons.className = 'devcfg-snippet-buttons';
+  optionSnippets.forEach((snippet) => {
+    const btn = document.createElement('button');
+    btn.textContent = snippet.label;
+    btn.addEventListener('click', () => {
+      event.options.push(snippet.create());
+      renderConfigEditor();
+    });
+    snippetButtons.appendChild(btn);
+  });
+  snippetWrap.appendChild(snippetButtons);
+  card.appendChild(snippetWrap);
   event.options.forEach((option, idx) => {
     const optWrap = document.createElement('div');
     optWrap.className = 'devcfg-card';
@@ -548,16 +610,7 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
   addOpt.textContent = 'Option hinzufügen';
   addOpt.addEventListener('click', () => {
     const nextIndex = event.options.length + 1;
-    event.options.push({
-      id: `option_${nextIndex}`,
-      text: 'Neue Option',
-      explanation: undefined,
-      effects: [],
-      questFlagChanges: [],
-      questTimerChanges: [],
-      enableBuildings: undefined,
-      enableQualifications: undefined,
-    });
+    event.options.push(createDefaultOption(`option_${nextIndex}`));
     renderConfigEditor();
   });
   card.appendChild(addOpt);
@@ -638,13 +691,7 @@ const newEvent = (): EventConfig => ({
   message: 'Beschreibung des Events',
   once: false,
   conditions: [],
-  options: [
-    {
-      id: 'option_1',
-      text: 'Option 1',
-      effects: [],
-    },
-  ],
+  options: [createDefaultOption('option_1')],
 });
 
 const newTranslationTable = (): TranslationTable => ({
