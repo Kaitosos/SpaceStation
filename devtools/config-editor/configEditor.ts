@@ -607,10 +607,20 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
 
   addSubheading(card, 'Optionen');
   const nextOptionId = (): string => `option_${event.options.length + 1}`;
+  const defaultEffectResource = suggestions.resourceNames[0] ?? 'resource';
+  const defaultBuildingId = suggestions.buildingIds[0] ?? 'building_id';
+  const defaultQualificationCode = suggestions.qualificationCodes[0] ?? 'qualification_code';
+
   const optionSnippets: { label: string; create: () => EventOption }[] = [
     {
-      label: 'Basis-Option mit Freischaltungen',
-      create: () => createDefaultOption(nextOptionId()),
+      label: 'Basis-Option mit Effekten & Freischaltung',
+      create: () => ({
+        ...createDefaultOption(nextOptionId()),
+        text: 'Neue Option',
+        effects: [{ resource: defaultEffectResource, amount: 0 }],
+        enableBuildings: [defaultBuildingId],
+        enableQualifications: [defaultQualificationCode],
+      }),
     },
     {
       label: 'Quest-Option mit Standardwerten',
@@ -619,6 +629,22 @@ const createEventCard = (event: EventConfig, container: HTMLElement): void => {
         text: 'Quest-Update',
         questFlagChanges: [{ id: 'quest_flag', op: 'set', value: 0 }],
         questTimerChanges: [{ id: 'quest_timer', op: 'set', value: 0 }],
+      }),
+    },
+    {
+      label: 'Komplette Option (Effekte + Quest)',
+      create: () => ({
+        ...createDefaultOption(nextOptionId()),
+        text: 'Umfangreiche Option',
+        explanation: 'Beispiel mit Ressourcenänderung, Freischaltungen und Quest-Updates',
+        effects: [
+          { resource: defaultEffectResource, amount: 1 },
+          { resource: defaultEffectResource, amount: -1 },
+        ],
+        enableBuildings: [defaultBuildingId],
+        enableQualifications: [defaultQualificationCode],
+        questFlagChanges: [{ id: 'quest_flag', op: 'add', value: 1 }],
+        questTimerChanges: [{ id: 'quest_timer', op: 'add', value: 10 }],
       }),
     },
   ];
