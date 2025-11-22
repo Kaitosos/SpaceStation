@@ -449,6 +449,65 @@
       transition: border-color 0.1s ease, transform 0.05s ease, box-shadow 0.1s ease;
     }
 
+    .menu-slots {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid rgba(80, 250, 123, 0.35);
+      border-radius: 12px;
+      background: rgba(10, 20, 20, 0.4);
+    }
+
+    .menu-slot-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    #menu-slot-select {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(80, 250, 123, 0.6);
+      background: rgba(15, 15, 40, 0.9);
+      color: inherit;
+      min-width: 140px;
+    }
+
+    .menu-slot-list {
+      display: grid;
+      gap: 6px;
+    }
+
+    .slot-entry {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid rgba(80, 250, 123, 0.25);
+      border-radius: 10px;
+      background: rgba(15, 15, 30, 0.8);
+      font-size: 13px;
+    }
+
+    .slot-entry.selected {
+      border-color: #50fa7b;
+      box-shadow: 0 0 10px rgba(80, 250, 123, 0.3);
+    }
+
+    .slot-title {
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #8be9fd;
+    }
+
+    .slot-meta {
+      color: #cfcff6;
+      opacity: 0.8;
+      font-size: 12px;
+    }
+
     .menu-actions button:hover {
       border-color: #8be9fd;
       transform: translateY(-1px);
@@ -791,6 +850,18 @@
     <div class="menu-panel">
       <h1 class="menu-title">Space Station</h1>
       <p class="menu-subtitle">Prototyp – Verwaltung deiner Orbitalbasis</p>
+      <div class="menu-slots">
+        <div class="menu-slot-row">
+          <span>Speicher-Slot</span>
+          <select id="menu-slot-select">
+            <option value="slot-1">Slot 1</option>
+            <option value="slot-2">Slot 2</option>
+            <option value="slot-3">Slot 3</option>
+          </select>
+        </div>
+        <div id="menu-slot-timestamp" class="menu-secondary">Ausgewählt: Leer</div>
+        <div id="menu-slot-list" class="menu-slot-list"></div>
+      </div>
       <div class="menu-actions">
         <button id="menu-resume" class="primary">Fortsetzen</button>
         <button id="menu-new">Neu</button>

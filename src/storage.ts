@@ -8,6 +8,7 @@ const SAVE_KEY_PREFIX = 'spacestation-save-slot-';
 interface SavePayload {
   version: number;
   state: unknown;
+  savedAt?: number;
 }
 
 function isString(value: unknown): value is string {
@@ -320,6 +321,7 @@ export function serializeGameState(game: GameState): string {
   const payload: SavePayload = {
     version: SAVE_VERSION,
     state: safeState,
+    savedAt: Date.now(),
   };
   return JSON.stringify(payload);
 }
@@ -363,5 +365,25 @@ export function loadGameStateFromSlot(slotId: string): GameState | null {
   } catch (error) {
     console.error('Konnte Save nicht laden:', error);
     return null;
+  }
+}
+
+export interface SaveSlotInfo {
+  slotId: string;
+  savedAt: number | null;
+  hasData: boolean;
+}
+
+export function getSaveSlotInfo(slotId: string): SaveSlotInfo {
+  const storage = ensureLocalStorage();
+  const raw = storage.getItem(getSaveSlotKey(slotId));
+  if (!raw) return { slotId, savedAt: null, hasData: false };
+  try {
+    const payload = JSON.parse(raw) as Partial<SavePayload>;
+    const savedAt = isNumber(payload.savedAt) ? payload.savedAt : null;
+    return { slotId, savedAt, hasData: true };
+  } catch (error) {
+    console.error('Konnte Save-Metadaten nicht lesen:', error);
+    return { slotId, savedAt: null, hasData: true };
   }
 }

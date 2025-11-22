@@ -7,6 +7,7 @@ const {
   saveGameStateToSlot,
   loadGameStateFromSlot,
   getSaveSlotKey,
+  getSaveSlotInfo,
 } = require('../src/storage');
 const { placeBuildingAt } = require('../src/buildings');
 
@@ -47,6 +48,7 @@ test('serializeGameState wraps payload with version and sanitizes values', () =>
 
   assert.strictEqual(parsed.version, 1);
   assert.strictEqual(parsed.state.resources.energy.current, 0);
+  assert.ok(typeof parsed.savedAt === 'number');
 });
 
 test('deserializeGameState validates version and corrupt payloads', () => {
@@ -138,6 +140,24 @@ test('saveGameStateToSlot and loadGameStateFromSlot persist using prefixed keys'
   const loaded = loadGameStateFromSlot('A');
   assert.ok(loaded);
   assert.strictEqual(loaded.screen, 'mainMenu');
+});
+
+test('getSaveSlotInfo returns savedAt metadata', () => {
+  const storage = new Map();
+  global.localStorage = {
+    getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, value) => storage.set(key, value),
+    removeItem: (key) => storage.delete(key),
+    clear: () => storage.clear(),
+  };
+
+  const game = createMinimalGameState();
+  saveGameStateToSlot('A', game);
+
+  const info = getSaveSlotInfo('A');
+  assert.strictEqual(info.slotId, 'A');
+  assert.strictEqual(info.hasData, true);
+  assert.ok(typeof info.savedAt === 'number' || info.savedAt === null);
 });
 
 test('loadGameStateFromSlot returns null and logs on corrupt save', () => {
