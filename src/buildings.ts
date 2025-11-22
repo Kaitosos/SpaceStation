@@ -9,6 +9,17 @@ function nextModuleId(): string {
   return 'm_' + String(moduleIdCounter++).padStart(3, '0');
 }
 
+export function syncModuleIdCounterFromModules(modules: ModuleState[]): void {
+  const maxId = modules.reduce((currentMax, mod) => {
+    const match = /^m_(\d+)$/.exec(mod.id);
+    if (!match) return currentMax;
+    const numericId = Number.parseInt(match[1], 10);
+    return Number.isFinite(numericId) ? Math.max(currentMax, numericId) : currentMax;
+  }, 0);
+
+  moduleIdCounter = Math.max(maxId + 1, 1);
+}
+
 export function createGrid(width: number, height: number): Grid {
   const cells: Cell[] = [];
   for (let y = 0; y < height; y++) {
