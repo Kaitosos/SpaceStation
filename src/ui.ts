@@ -14,6 +14,8 @@ let resourcesEl: HTMLElement;
 let timeDisplayEl: HTMLElement;
 let buildMenuEl: HTMLElement;
 let gridEl: HTMLElement;
+let gridLegendEl: HTMLElement;
+let gridSelectionEl: HTMLElement;
 let logEl: HTMLElement;
 let popupEl: HTMLElement;
 let popupTitleEl: HTMLElement;
@@ -69,6 +71,29 @@ let lastPopupState: string | null = null;
 let lastGridSize: { width: number; height: number } | null = null;
 const gridCellEls = new Map<string, HTMLElement>();
 const buildingTypeMap = new Map(BUILDING_TYPES.map((b) => [b.id, b]));
+
+function getTypeAccentColor(typeId: string | null): string | null {
+  if (!typeId) return null;
+  const type = buildingTypeMap.get(typeId);
+  if (!type) return null;
+
+  switch (type.type) {
+    case 'energie':
+      return 'var(--color-accent-cyan)';
+    case 'versorgung':
+      return 'var(--color-accent-green)';
+    case 'wohnen':
+      return 'var(--color-accent-pink)';
+    case 'speicher':
+      return 'var(--color-accent-amber)';
+    case 'logistik':
+      return '#ffb86c';
+    case 'forschung':
+      return '#bd93f9';
+    default:
+      return '#8be9fd';
+  }
+}
 
 function resetUiCaches(): void {
   resourceRows.clear();
@@ -277,6 +302,27 @@ function renderBuildMenu(game: GameState): void {
     selectedBuildTypeFilter = 'all';
   }
 
+  const filteredTypes = availableTypes.filter(
+    (t) => selectedBuildTypeFilter === 'all' || t.type === selectedBuildTypeFilter,
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  const buildMenuState = JSON.stringify({
+    selectedBuildTypeFilter,
+    selectedBuildingTypeId: game.selectedBuildingTypeId,
+    availableTypes: availableTypes.map((t) => t.id).sort(),
+    filteredTypes: filteredTypes.map((t) => t.id),
+  });
+
+  if (buildMenuState === lastBuildMenuState) {
+    return;
+  }
+
+  lastBuildMenuState = buildMenuState;
+
+  buildMenuEl.innerHTML = '';
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'build-toolbar';
   const filterBar = document.createElement('div');
   filterBar.className = 'build-filter';
   const filterLabel = document.createElement('label');
@@ -311,56 +357,67 @@ function renderBuildMenu(game: GameState): void {
   filterLabel.appendChild(filterSelect);
   filterBar.appendChild(filterLabel);
 
-  const filteredTypes = availableTypes.filter(
-    (t) => selectedBuildTypeFilter === 'all' || t.type === selectedBuildTypeFilter,
-  );
-
-  const buildMenuState = JSON.stringify({
-    selectedBuildTypeFilter,
-    selectedBuildingTypeId: game.selectedBuildingTypeId,
-    availableTypes: availableTypes.map((t) => t.id).sort(),
-    filteredTypes: filteredTypes.map((t) => t.id).sort(),
-  });
-
-  if (buildMenuState === lastBuildMenuState) {
-    return;
-  }
-
-  lastBuildMenuState = buildMenuState;
-
-  buildMenuEl.innerHTML = '';
-  const header = document.createElement('h2');
-  header.textContent = 'Module';
-  buildMenuEl.appendChild(header);
-
-  buildMenuEl.appendChild(filterBar);
+  const toolbarInfo = document.createElement('div');
+  toolbarInfo.className = 'card__meta';
+  toolbarInfo.textContent = `${filteredTypes.length} Modultypen`;
+  toolbar.appendChild(filterBar);
+  toolbar.appendChild(toolbarInfo);
+  buildMenuEl.appendChild(toolbar);
 
   for (const type of filteredTypes) {
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'card card--clickable build-card';
     if (game.selectedBuildingTypeId === type.id) {
       btn.classList.add('card--active');
     }
 
+    const header = document.createElement('div');
+    header.className = 'card__header';
     const nameDiv = document.createElement('h3');
     nameDiv.className = 'card__title';
     nameDiv.textContent = type.name;
+    const shortBadge = document.createElement('span');
+    shortBadge.className = 'badge badge--info';
+    shortBadge.textContent = type.shortName;
+    header.appendChild(nameDiv);
+    header.appendChild(shortBadge);
 
-    const metaDiv = document.createElement('div');
-    metaDiv.className = 'card__meta';
-    metaDiv.textContent = `Typ: ${type.type} • Größe: ${type.size.width}x${type.size.height}`;
+    const badgeRow = document.createElement('div');
+    badgeRow.className = 'badge-row';
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'badge';
+    typeBadge.textContent = `Typ: ${type.type}`;
+    const sizeBadge = document.createElement('span');
+    sizeBadge.className = 'badge';
+    sizeBadge.textContent = `Größe: ${type.size.width}x${type.size.height}`;
+    badgeRow.appendChild(typeBadge);
+    badgeRow.appendChild(sizeBadge);
 
-    const costDiv = document.createElement('div');
-    costDiv.className = 'card__meta';
-    costDiv.textContent =
-      'Kosten: ' +
-      (type.cost.length
-        ? type.cost.map((c) => `${c.amount} ${c.resource}`).join(', ')
-        : 'keine');
+    const costBadge = document.createElement('div');
+    costBadge.className = 'badge-row';
+    const costLabel = document.createElement('span');
+    costLabel.className = 'badge badge--warn';
+    costLabel.textContent = 'Kosten';
+    costBadge.appendChild(costLabel);
+    const costText = type.cost.length
+      ? type.cost.map((c) => `${c.amount} ${c.resource}`).join(', ')
+      : 'keine';
+    const costValue = document.createElement('span');
+    costValue.className = 'card__meta';
+    costValue.textContent = costText;
+    costBadge.appendChild(costValue);
 
     const descDiv = document.createElement('div');
     descDiv.className = 'card__meta build-desc';
     descDiv.textContent = type.description;
+
+    const actionRow = document.createElement('div');
+    actionRow.className = 'card__actions';
+    const selectLabel = document.createElement('span');
+    selectLabel.className = 'btn btn--soft btn--pill';
+    selectLabel.textContent = game.selectedBuildingTypeId === type.id ? 'Aktiv' : 'Zum Bauen wählen';
+    actionRow.appendChild(selectLabel);
 
     const imageDiv = document.createElement('div');
     imageDiv.className = 'build-image';
@@ -368,19 +425,49 @@ function renderBuildMenu(game: GameState): void {
       imageDiv.style.backgroundImage = `url(${type.image})`;
     }
 
-    btn.appendChild(nameDiv);
-    btn.appendChild(metaDiv);
-    btn.appendChild(costDiv);
+    btn.appendChild(header);
+    btn.appendChild(badgeRow);
+    btn.appendChild(costBadge);
     btn.appendChild(descDiv);
+    btn.appendChild(actionRow);
     btn.appendChild(imageDiv);
 
     btn.addEventListener('click', () => {
       game.selectedBuildingTypeId =
         game.selectedBuildingTypeId === type.id ? null : type.id;
       renderBuildMenu(game);
+      renderGridLegend(game);
+      renderGrid(game);
     });
 
     buildMenuEl.appendChild(btn);
+  }
+}
+
+function renderGridLegend(game: GameState): void {
+  const types = BUILDING_TYPES.filter((t) => t.enabled).sort((a, b) => a.name.localeCompare(b.name));
+  const selectedType = game.selectedBuildingTypeId ? buildingTypeMap.get(game.selectedBuildingTypeId) : null;
+
+  gridLegendEl.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'grid-legend__label';
+  label.textContent = 'Legende';
+  gridLegendEl.appendChild(label);
+
+  for (const type of types) {
+    const badge = document.createElement('span');
+    badge.className = 'badge badge--info';
+    if (selectedType?.id === type.id) {
+      badge.classList.add('badge--success');
+    }
+    badge.textContent = `${type.shortName}: ${type.name}`;
+    gridLegendEl.appendChild(badge);
+  }
+
+  if (selectedType) {
+    gridSelectionEl.textContent = `Ausgewählt: ${selectedType.shortName} – ${selectedType.name}`;
+  } else {
+    gridSelectionEl.textContent = 'Kein Modultyp ausgewählt';
   }
 }
 
@@ -388,6 +475,15 @@ function renderGrid(game: GameState): void {
   const grid = game.grid;
   const sizeChanged =
     !lastGridSize || lastGridSize.width !== grid.width || lastGridSize.height !== grid.height;
+  const selectedType = game.selectedBuildingTypeId ? buildingTypeMap.get(game.selectedBuildingTypeId) : null;
+  const hoverColor = getTypeAccentColor(game.selectedBuildingTypeId);
+
+  if (hoverColor) {
+    gridEl.style.setProperty('--grid-hover-color', hoverColor);
+  } else {
+    gridEl.style.removeProperty('--grid-hover-color');
+  }
+  gridEl.classList.toggle('grid--placing', !!selectedType);
 
   if (sizeChanged) {
     gridEl.innerHTML = '';
@@ -440,6 +536,19 @@ function renderGrid(game: GameState): void {
       } else {
         div.textContent = '';
         div.style.backgroundImage = '';
+      }
+    }
+
+    if (!cell.buildingTypeId && selectedType) {
+      div.dataset.preview = selectedType.shortName;
+      div.title = `Platzieren: ${selectedType.name} (${selectedType.size.width}x${selectedType.size.height})`;
+    } else {
+      div.removeAttribute('data-preview');
+      if (cell.buildingTypeId) {
+        const type = BUILDING_TYPES.find((t) => t.id === cell.buildingTypeId);
+        div.title = type ? `${type.name} (${type.size.width}x${type.size.height})` : 'Unbekanntes Modul';
+      } else {
+        div.removeAttribute('title');
       }
     }
   }
@@ -1192,6 +1301,7 @@ export function renderAll(game: GameState): void {
   if (!menuActive) {
     if (game.screen === 'build') {
       renderBuildMenu(game);
+      renderGridLegend(game);
       renderGrid(game);
     } else if (game.screen === 'personnel') {
       renderModuleList(game);
@@ -1215,6 +1325,8 @@ export function initUi(
   timeDisplayEl = document.getElementById('time-display')!;
   buildMenuEl = document.getElementById('build-menu')!;
   gridEl = document.getElementById('grid')!;
+  gridLegendEl = document.getElementById('grid-legend')!;
+  gridSelectionEl = document.getElementById('grid-selection')!;
   logEl = document.getElementById('log')!;
   popupEl = document.getElementById('event-popup')!;
   popupTitleEl = document.getElementById('popup-title')!;
