@@ -14,6 +14,8 @@ let resourcesEl: HTMLElement;
 let timeDisplayEl: HTMLElement;
 let buildMenuEl: HTMLElement;
 let gridEl: HTMLElement;
+let gridLegendEl: HTMLElement;
+let gridSelectionEl: HTMLElement;
 let logEl: HTMLElement;
 let popupEl: HTMLElement;
 let popupTitleEl: HTMLElement;
@@ -40,6 +42,7 @@ let peopleFilterInput: HTMLInputElement;
 let unassignedFilterBtn: HTMLButtonElement;
 let moduleViewModeSelect: HTMLSelectElement;
 let personDetailHeaderEl: HTMLElement;
+let personDetailModuleEl: HTMLElement;
 let personDetailBodyEl: HTMLElement;
 let personDetailBackBtn: HTMLButtonElement;
 let onChooseEventOption: ((option: EventOption) => void) | null = null;
@@ -68,6 +71,29 @@ let lastPopupState: string | null = null;
 let lastGridSize: { width: number; height: number } | null = null;
 const gridCellEls = new Map<string, HTMLElement>();
 const buildingTypeMap = new Map(BUILDING_TYPES.map((b) => [b.id, b]));
+
+function getTypeAccentColor(typeId: string | null): string | null {
+  if (!typeId) return null;
+  const type = buildingTypeMap.get(typeId);
+  if (!type) return null;
+
+  switch (type.type) {
+    case 'energie':
+      return 'var(--color-accent-cyan)';
+    case 'versorgung':
+      return 'var(--color-accent-green)';
+    case 'wohnen':
+      return 'var(--color-accent-pink)';
+    case 'speicher':
+      return 'var(--color-accent-amber)';
+    case 'logistik':
+      return '#ffb86c';
+    case 'forschung':
+      return '#bd93f9';
+    default:
+      return '#8be9fd';
+  }
+}
 
 function resetUiCaches(): void {
   resourceRows.clear();
@@ -276,6 +302,27 @@ function renderBuildMenu(game: GameState): void {
     selectedBuildTypeFilter = 'all';
   }
 
+  const filteredTypes = availableTypes.filter(
+    (t) => selectedBuildTypeFilter === 'all' || t.type === selectedBuildTypeFilter,
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  const buildMenuState = JSON.stringify({
+    selectedBuildTypeFilter,
+    selectedBuildingTypeId: game.selectedBuildingTypeId,
+    availableTypes: availableTypes.map((t) => t.id).sort(),
+    filteredTypes: filteredTypes.map((t) => t.id),
+  });
+
+  if (buildMenuState === lastBuildMenuState) {
+    return;
+  }
+
+  lastBuildMenuState = buildMenuState;
+
+  buildMenuEl.innerHTML = '';
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'build-toolbar';
   const filterBar = document.createElement('div');
   filterBar.className = 'build-filter';
   const filterLabel = document.createElement('label');
@@ -310,56 +357,67 @@ function renderBuildMenu(game: GameState): void {
   filterLabel.appendChild(filterSelect);
   filterBar.appendChild(filterLabel);
 
-  const filteredTypes = availableTypes.filter(
-    (t) => selectedBuildTypeFilter === 'all' || t.type === selectedBuildTypeFilter,
-  );
-
-  const buildMenuState = JSON.stringify({
-    selectedBuildTypeFilter,
-    selectedBuildingTypeId: game.selectedBuildingTypeId,
-    availableTypes: availableTypes.map((t) => t.id).sort(),
-    filteredTypes: filteredTypes.map((t) => t.id).sort(),
-  });
-
-  if (buildMenuState === lastBuildMenuState) {
-    return;
-  }
-
-  lastBuildMenuState = buildMenuState;
-
-  buildMenuEl.innerHTML = '';
-  const header = document.createElement('h2');
-  header.textContent = 'Module';
-  buildMenuEl.appendChild(header);
-
-  buildMenuEl.appendChild(filterBar);
+  const toolbarInfo = document.createElement('div');
+  toolbarInfo.className = 'card__meta';
+  toolbarInfo.textContent = `${filteredTypes.length} Modultypen`;
+  toolbar.appendChild(filterBar);
+  toolbar.appendChild(toolbarInfo);
+  buildMenuEl.appendChild(toolbar);
 
   for (const type of filteredTypes) {
     const btn = document.createElement('button');
-    btn.className = 'build-button';
+    btn.type = 'button';
+    btn.className = 'card card--clickable build-card';
     if (game.selectedBuildingTypeId === type.id) {
-      btn.classList.add('selected');
+      btn.classList.add('card--active');
     }
 
-    const nameDiv = document.createElement('div');
-    nameDiv.className = 'build-name';
+    const header = document.createElement('div');
+    header.className = 'card__header';
+    const nameDiv = document.createElement('h3');
+    nameDiv.className = 'card__title';
     nameDiv.textContent = type.name;
+    const shortBadge = document.createElement('span');
+    shortBadge.className = 'badge badge--info';
+    shortBadge.textContent = type.shortName;
+    header.appendChild(nameDiv);
+    header.appendChild(shortBadge);
 
-    const metaDiv = document.createElement('div');
-    metaDiv.className = 'build-meta';
-    metaDiv.textContent = `Typ: ${type.type} • Größe: ${type.size.width}x${type.size.height}`;
+    const badgeRow = document.createElement('div');
+    badgeRow.className = 'badge-row';
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'badge';
+    typeBadge.textContent = `Typ: ${type.type}`;
+    const sizeBadge = document.createElement('span');
+    sizeBadge.className = 'badge';
+    sizeBadge.textContent = `Größe: ${type.size.width}x${type.size.height}`;
+    badgeRow.appendChild(typeBadge);
+    badgeRow.appendChild(sizeBadge);
 
-    const costDiv = document.createElement('div');
-    costDiv.className = 'build-cost';
-    costDiv.textContent =
-      'Kosten: ' +
-      (type.cost.length
-        ? type.cost.map((c) => `${c.amount} ${c.resource}`).join(', ')
-        : 'keine');
+    const costBadge = document.createElement('div');
+    costBadge.className = 'badge-row';
+    const costLabel = document.createElement('span');
+    costLabel.className = 'badge badge--warn';
+    costLabel.textContent = 'Kosten';
+    costBadge.appendChild(costLabel);
+    const costText = type.cost.length
+      ? type.cost.map((c) => `${c.amount} ${c.resource}`).join(', ')
+      : 'keine';
+    const costValue = document.createElement('span');
+    costValue.className = 'card__meta';
+    costValue.textContent = costText;
+    costBadge.appendChild(costValue);
 
     const descDiv = document.createElement('div');
-    descDiv.className = 'build-desc';
+    descDiv.className = 'card__meta build-desc';
     descDiv.textContent = type.description;
+
+    const actionRow = document.createElement('div');
+    actionRow.className = 'card__actions';
+    const selectLabel = document.createElement('span');
+    selectLabel.className = 'btn btn--soft btn--pill';
+    selectLabel.textContent = game.selectedBuildingTypeId === type.id ? 'Aktiv' : 'Zum Bauen wählen';
+    actionRow.appendChild(selectLabel);
 
     const imageDiv = document.createElement('div');
     imageDiv.className = 'build-image';
@@ -367,19 +425,49 @@ function renderBuildMenu(game: GameState): void {
       imageDiv.style.backgroundImage = `url(${type.image})`;
     }
 
-    btn.appendChild(nameDiv);
-    btn.appendChild(metaDiv);
-    btn.appendChild(costDiv);
+    btn.appendChild(header);
+    btn.appendChild(badgeRow);
+    btn.appendChild(costBadge);
     btn.appendChild(descDiv);
+    btn.appendChild(actionRow);
     btn.appendChild(imageDiv);
 
     btn.addEventListener('click', () => {
       game.selectedBuildingTypeId =
         game.selectedBuildingTypeId === type.id ? null : type.id;
       renderBuildMenu(game);
+      renderGridLegend(game);
+      renderGrid(game);
     });
 
     buildMenuEl.appendChild(btn);
+  }
+}
+
+function renderGridLegend(game: GameState): void {
+  const types = BUILDING_TYPES.filter((t) => t.enabled).sort((a, b) => a.name.localeCompare(b.name));
+  const selectedType = game.selectedBuildingTypeId ? buildingTypeMap.get(game.selectedBuildingTypeId) : null;
+
+  gridLegendEl.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'grid-legend__label';
+  label.textContent = 'Legende';
+  gridLegendEl.appendChild(label);
+
+  for (const type of types) {
+    const badge = document.createElement('span');
+    badge.className = 'badge badge--info';
+    if (selectedType?.id === type.id) {
+      badge.classList.add('badge--success');
+    }
+    badge.textContent = `${type.shortName}: ${type.name}`;
+    gridLegendEl.appendChild(badge);
+  }
+
+  if (selectedType) {
+    gridSelectionEl.textContent = `Ausgewählt: ${selectedType.shortName} – ${selectedType.name}`;
+  } else {
+    gridSelectionEl.textContent = 'Kein Modultyp ausgewählt';
   }
 }
 
@@ -387,6 +475,15 @@ function renderGrid(game: GameState): void {
   const grid = game.grid;
   const sizeChanged =
     !lastGridSize || lastGridSize.width !== grid.width || lastGridSize.height !== grid.height;
+  const selectedType = game.selectedBuildingTypeId ? buildingTypeMap.get(game.selectedBuildingTypeId) : null;
+  const hoverColor = getTypeAccentColor(game.selectedBuildingTypeId);
+
+  if (hoverColor) {
+    gridEl.style.setProperty('--grid-hover-color', hoverColor);
+  } else {
+    gridEl.style.removeProperty('--grid-hover-color');
+  }
+  gridEl.classList.toggle('grid--placing', !!selectedType);
 
   if (sizeChanged) {
     gridEl.innerHTML = '';
@@ -441,6 +538,19 @@ function renderGrid(game: GameState): void {
         div.style.backgroundImage = '';
       }
     }
+
+    if (!cell.buildingTypeId && selectedType) {
+      div.dataset.preview = selectedType.shortName;
+      div.title = `Platzieren: ${selectedType.name} (${selectedType.size.width}x${selectedType.size.height})`;
+    } else {
+      div.removeAttribute('data-preview');
+      if (cell.buildingTypeId) {
+        const type = BUILDING_TYPES.find((t) => t.id === cell.buildingTypeId);
+        div.title = type ? `${type.name} (${type.size.width}x${type.size.height})` : 'Unbekanntes Modul';
+      } else {
+        div.removeAttribute('title');
+      }
+    }
   }
 }
 
@@ -490,7 +600,7 @@ function renderModuleList(game: GameState): void {
   }
   if (!game.modules.length) {
     const empty = document.createElement('div');
-    empty.className = 'card card-meta';
+    empty.className = 'card card__meta';
     empty.textContent = 'Noch keine Module gebaut.';
     moduleCardsEl.appendChild(empty);
     return;
@@ -523,14 +633,14 @@ function renderModuleList(game: GameState): void {
     const card = document.createElement('div');
     card.className = 'card module-card module-group';
     const header = document.createElement('div');
-    header.className = 'card-header';
+    header.className = 'card__header';
     header.textContent = `${type?.name || typeId} (${mods.length})`;
 
     const activeCount = mods.filter((m) => m.active).length;
     const slotTotal = mods.reduce((sum, m) => sum + (m.workerMax ?? 0), 0);
     const usedSlots = mods.reduce((sum, m) => sum + m.workers.length, 0);
     const status = document.createElement('span');
-    status.className = 'card-meta';
+    status.className = 'card__meta';
     status.textContent = `${activeCount}/${mods.length} aktiv • Slots: ${usedSlots}/${slotTotal}`;
     header.appendChild(status);
     card.appendChild(header);
@@ -541,7 +651,7 @@ function renderModuleList(game: GameState): void {
     for (const mod of mods) {
       const row = document.createElement('div');
       row.className = 'module-row';
-      if (game.selectedModuleId === mod.id) row.classList.add('selected');
+      row.classList.toggle('card--active', game.selectedModuleId === mod.id);
       row.classList.toggle('inactive', !mod.active);
 
       const title = document.createElement('div');
@@ -549,7 +659,7 @@ function renderModuleList(game: GameState): void {
       title.textContent = `#${mod.id} • Position ${mod.x}/${mod.y}`;
 
       const workerMeta = document.createElement('div');
-      workerMeta.className = 'card-meta';
+      workerMeta.className = 'card__meta';
       const workerNames = mod.workers
         .map((id) => game.people.find((p) => p.id === id)?.name)
         .filter(Boolean);
@@ -560,13 +670,14 @@ function renderModuleList(game: GameState): void {
       workerMeta.textContent = `Slots: ${mod.workers.length}/${mod.workerMax ?? 0}${qualText}`;
 
       const workerLine = document.createElement('div');
-      workerLine.className = 'card-meta';
+      workerLine.className = 'card__meta';
       workerLine.textContent = workerNames.length ? `Arbeiter: ${workerNames.join(', ')}` : 'Keine zugewiesen';
 
       const actions = document.createElement('div');
-      actions.className = 'module-row-actions';
+      actions.className = 'card__actions module-row-actions';
 
       const selectBtn = document.createElement('button');
+      selectBtn.className = 'btn btn--ghost';
       selectBtn.textContent = 'Wählen';
       selectBtn.addEventListener('click', (ev) => {
         ev.stopPropagation();
@@ -575,6 +686,7 @@ function renderModuleList(game: GameState): void {
       });
 
       const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'btn btn--ghost';
       toggleBtn.textContent = mod.active ? 'Deaktivieren' : 'Aktivieren';
       toggleBtn.addEventListener('click', (ev) => {
         ev.stopPropagation();
@@ -615,40 +727,40 @@ function renderModuleTaskList(game: GameState): void {
   for (const mod of modules) {
     const type = buildingTypeMap.get(mod.typeId);
     const card = document.createElement('div');
-    card.className = 'card module-card module-task-card';
-    card.classList.toggle('selected', game.selectedModuleId === mod.id);
+    card.className = 'card card--clickable module-card module-task-card';
+    card.classList.toggle('card--active', game.selectedModuleId === mod.id);
     card.classList.toggle('inactive', !mod.active);
 
     const header = document.createElement('div');
-    header.className = 'card-header';
+    header.className = 'card__header';
     header.textContent = `${type?.name || mod.typeId} (#${mod.id})`;
 
     const status = document.createElement('span');
-    status.className = 'card-meta';
+    status.className = 'card__meta';
     const freeSlots = Math.max((mod.workerMax ?? 0) - mod.workers.length, 0);
     status.textContent = `${mod.active ? 'Aktiv' : 'Inaktiv'} • Freie Slots: ${freeSlots}/${mod.workerMax}`;
     header.appendChild(status);
     card.appendChild(header);
 
     const location = document.createElement('div');
-    location.className = 'card-meta';
+    location.className = 'card__meta';
     location.textContent = `Position: ${mod.x}/${mod.y}`;
     card.appendChild(location);
 
     if (mod.requiredQualifications.length || mod.bonusQualifications.length) {
       const qualRow = document.createElement('div');
-      qualRow.className = 'pill-row';
+      qualRow.className = 'badge-row';
       for (const code of [...mod.requiredQualifications, ...mod.bonusQualifications]) {
-        const pill = document.createElement('span');
-        pill.className = 'pill';
-        pill.textContent = qualificationTitle(game, code);
-        qualRow.appendChild(pill);
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = qualificationTitle(game, code);
+        qualRow.appendChild(badge);
       }
       card.appendChild(qualRow);
     }
 
     const workerLine = document.createElement('div');
-    workerLine.className = 'card-meta';
+    workerLine.className = 'card__meta';
     const workerNames = mod.workers
       .map((id) => game.people.find((p) => p.id === id)?.name)
       .filter(Boolean);
@@ -658,8 +770,9 @@ function renderModuleTaskList(game: GameState): void {
     card.appendChild(workerLine);
 
     const actions = document.createElement('div');
-    actions.className = 'module-row-actions';
+    actions.className = 'card__actions module-row-actions';
     const selectBtn = document.createElement('button');
+    selectBtn.className = 'btn btn--ghost';
     selectBtn.textContent = 'Auswählen';
     selectBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -667,6 +780,7 @@ function renderModuleTaskList(game: GameState): void {
       renderAll(game);
     });
     const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'btn btn--ghost';
     toggleBtn.textContent = mod.active ? 'Deaktivieren' : 'Aktivieren';
     toggleBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -698,7 +812,7 @@ function renderPeopleList(game: GameState): void {
     .filter((p) => !showUnassignedOnly || !p.work);
   if (!filteredPeople.length) {
     const empty = document.createElement('div');
-    empty.className = 'card card-meta';
+    empty.className = 'card card__meta';
     empty.textContent = 'Keine Personen passend zum Filter.';
     peopleCardsEl.appendChild(empty);
     return;
@@ -706,7 +820,7 @@ function renderPeopleList(game: GameState): void {
 
   for (const person of filteredPeople) {
     const card = document.createElement('div');
-    card.className = 'card person-card';
+    card.className = 'card card--clickable person-card';
     card.addEventListener('click', (ev) => {
       if ((ev.target as HTMLElement).tagName.toLowerCase() === 'button') return;
       game.selectedPersonId = person.id;
@@ -716,7 +830,7 @@ function renderPeopleList(game: GameState): void {
     });
 
     const header = document.createElement('div');
-    header.className = 'card-header';
+    header.className = 'card__header';
     header.textContent = person.name;
     const status = document.createElement('span');
     status.className = 'person-status';
@@ -736,24 +850,25 @@ function renderPeopleList(game: GameState): void {
 
     if (person.qualifications.length) {
       const qualRow = document.createElement('div');
-      qualRow.className = 'pill-row';
+      qualRow.className = 'badge-row';
       for (const code of person.qualifications) {
-        const pill = document.createElement('span');
-        pill.className = 'pill';
-        pill.textContent = qualificationTitle(game, code);
-        qualRow.appendChild(pill);
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = qualificationTitle(game, code);
+        qualRow.appendChild(badge);
       }
       card.appendChild(qualRow);
     }
 
     const needs = document.createElement('div');
-    needs.className = 'card-meta';
+    needs.className = 'card__meta';
     needs.textContent = `Bedarf: ${formatResourceDeltaList(person.needsPerTick)} | Einkommen: ${formatResourceDeltaList(
       person.incomePerTick,
     )}`;
     card.appendChild(needs);
 
     const detailBtn = document.createElement('button');
+    detailBtn.className = 'btn btn--ghost';
     detailBtn.textContent = 'Details';
     detailBtn.addEventListener('click', () => {
       game.selectedPersonId = person.id;
@@ -761,9 +876,12 @@ function renderPeopleList(game: GameState): void {
       lastGameplayScreen = 'personDetail';
       renderAll(game);
     });
-    card.appendChild(detailBtn);
+    const actionsContainer = document.createElement('div');
+    actionsContainer.className = 'card__actions';
+    actionsContainer.appendChild(detailBtn);
 
     const actionBtn = document.createElement('button');
+    actionBtn.className = 'btn btn--ghost';
 
     if (!selectedModule) {
       actionBtn.textContent = 'Modul wählen';
@@ -795,19 +913,31 @@ function renderPeopleList(game: GameState): void {
       });
     }
 
-    card.appendChild(actionBtn);
+    actionsContainer.appendChild(actionBtn);
+    card.appendChild(actionsContainer);
     peopleCardsEl.appendChild(card);
   }
 }
 
 function renderPersonDetail(game: GameState): void {
   personDetailBodyEl.innerHTML = '';
+  personDetailModuleEl.innerHTML = '';
   if (!game.selectedPersonId) {
     personDetailHeaderEl.textContent = 'Keine Person ausgewählt';
+    const section = document.createElement('section');
+    section.className = 'person-detail__section';
+    const title = document.createElement('h4');
+    title.className = 'section-title';
+    title.textContent = 'Details';
+    const placeholder = document.createElement('div');
+    placeholder.className = 'card person-detail__card';
     const info = document.createElement('div');
-    info.className = 'card-meta';
+    info.className = 'card__meta';
     info.textContent = 'Wähle eine Person aus der Liste aus, um Details zu sehen.';
-    personDetailBodyEl.appendChild(info);
+    placeholder.appendChild(info);
+    section.appendChild(title);
+    section.appendChild(placeholder);
+    personDetailBodyEl.appendChild(section);
     return;
   }
 
@@ -818,130 +948,208 @@ function renderPersonDetail(game: GameState): void {
   }
 
   personDetailHeaderEl.textContent = person.name;
-
-  const status = document.createElement('div');
-  status.className = 'card-meta';
   const module = person.work ? getModuleById(game, person.work) : null;
   const moduleName = module ? buildingTypeMap.get(module.typeId)?.name || module.typeId : 'kein Modul';
-  const statusText = person.training
-    ? `In Schulung (${person.training.remainingTicks} Ticks)`
-    : person.unavailableFor > 0
-      ? `Verhindert (${person.unavailableFor} Ticks)`
-      : person.work
-        ? `Aktiv in ${moduleName}`
-        : 'Nicht zugewiesen';
-  status.textContent = statusText;
-  personDetailBodyEl.appendChild(status);
+  const moduleBadge = document.createElement('span');
+  moduleBadge.className = 'badge badge--info';
+  moduleBadge.textContent = person.work ? moduleName : 'Nicht zugewiesen';
+  personDetailModuleEl.appendChild(moduleBadge);
 
-  const balance = document.createElement('div');
-  balance.className = 'card-meta';
-  balance.textContent = `Bedarf: ${formatResourceDeltaList(person.needsPerTick)} | Einkommen: ${formatResourceDeltaList(
-    person.incomePerTick,
-  )}`;
-  personDetailBodyEl.appendChild(balance);
+  const createSection = (title: string): HTMLElement => {
+    const section = document.createElement('section');
+    section.className = 'person-detail__section';
+    const heading = document.createElement('h4');
+    heading.className = 'section-title';
+    heading.textContent = title;
+    section.appendChild(heading);
+    return section;
+  };
 
-  const dataHeader = document.createElement('div');
-  dataHeader.className = 'card-meta';
-  dataHeader.textContent = 'Persönliche Daten:';
-  personDetailBodyEl.appendChild(dataHeader);
+  const impactSection = createSection('Ressourcen-Impact');
+  const impactCard = document.createElement('div');
+  impactCard.className = 'card person-detail__card';
 
+  const statusRow = document.createElement('div');
+  statusRow.className = 'person-detail__status-row';
+
+  const statusBadge = document.createElement('span');
+  statusBadge.className = 'badge';
+  if (person.training) {
+    statusBadge.classList.add('badge--info');
+    statusBadge.textContent = `In Schulung (${person.training.remainingTicks} Ticks)`;
+  } else if (person.unavailableFor > 0) {
+    statusBadge.classList.add('badge--warn');
+    statusBadge.textContent = `Verhindert (${person.unavailableFor} Ticks)`;
+  } else if (person.work) {
+    statusBadge.classList.add('badge--success');
+    statusBadge.textContent = `Aktiv in ${moduleName}`;
+  } else {
+    statusBadge.textContent = 'Nicht zugewiesen';
+  }
+  statusRow.appendChild(statusBadge);
+
+  const balanceNeed = document.createElement('div');
+  balanceNeed.className = 'card__meta';
+  balanceNeed.textContent = `Bedarf pro Tick: ${formatResourceDeltaList(person.needsPerTick)}`;
+
+  const balanceIncome = document.createElement('div');
+  balanceIncome.className = 'card__meta';
+  balanceIncome.textContent = `Einkommen pro Tick: ${formatResourceDeltaList(person.incomePerTick)}`;
+
+  impactCard.appendChild(statusRow);
+  impactCard.appendChild(balanceNeed);
+  impactCard.appendChild(balanceIncome);
+  impactSection.appendChild(impactCard);
+
+  const dataSection = createSection('Persönliche Daten');
+  const dataCard = document.createElement('div');
+  dataCard.className = 'card person-detail__card';
   const dataList = document.createElement('div');
-  dataList.className = 'card';
-  dataList.classList.add('card-meta');
+  dataList.className = 'person-detail__list';
 
   const renderDataPoint = (dataPoint: DataPoint): HTMLElement => {
     const row = document.createElement('div');
-    row.className = 'card-meta';
+    row.className = 'person-detail__list-row';
+    const label = document.createElement('div');
+    label.className = 'person-detail__list-label';
+    label.textContent = dataPoint.name;
+    const value = document.createElement('div');
+    value.className = 'person-detail__list-value';
     const translated = dataPoint.translationTable
       ? translateValue(dataPoint.translationTable, dataPoint.value)
       : null;
-    const valueText = translated ? `${translated} (${dataPoint.value})` : String(dataPoint.value);
-    row.textContent = `${dataPoint.name}: ${valueText}`;
+    value.textContent = translated ? `${translated} (${dataPoint.value})` : String(dataPoint.value);
+    row.appendChild(label);
+    row.appendChild(value);
     return row;
   };
 
   if (person.personalData.length) {
     person.personalData.forEach((point) => dataList.appendChild(renderDataPoint(point)));
   } else {
-    const row = document.createElement('div');
-    row.className = 'card-meta';
-    row.textContent = 'Keine persönlichen Daten hinterlegt.';
-    dataList.appendChild(row);
+    const empty = document.createElement('div');
+    empty.className = 'card__meta';
+    empty.textContent = 'Keine persönlichen Daten hinterlegt.';
+    dataList.appendChild(empty);
   }
 
-  personDetailBodyEl.appendChild(dataList);
+  dataCard.appendChild(dataList);
+  dataSection.appendChild(dataCard);
 
+  const qualSection = createSection('Qualifikationen');
+  const qualCard = document.createElement('div');
+  qualCard.className = 'card person-detail__card';
   const qualRow = document.createElement('div');
-  qualRow.className = 'pill-row';
+  qualRow.className = 'badge-row';
   if (person.qualifications.length) {
     for (const code of person.qualifications) {
-      const pill = document.createElement('span');
-      pill.className = 'pill';
-      pill.textContent = qualificationTitle(game, code);
-      qualRow.appendChild(pill);
+      const badge = document.createElement('span');
+      badge.className = 'badge badge--success';
+      badge.textContent = qualificationTitle(game, code);
+      qualRow.appendChild(badge);
     }
   } else {
-    const pill = document.createElement('span');
-    pill.className = 'pill';
-    pill.textContent = 'Keine Qualifikationen';
-    qualRow.appendChild(pill);
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = 'Keine Qualifikationen';
+    qualRow.appendChild(badge);
   }
-  personDetailBodyEl.appendChild(qualRow);
+  qualCard.appendChild(qualRow);
+  qualSection.appendChild(qualCard);
 
-  const trainingBox = document.createElement('div');
-  trainingBox.className = 'card-meta';
-  trainingBox.textContent = person.training
-    ? `Aktuelle Schulung: ${qualificationTitle(game, person.training.qualificationCode)} (${person.training.remainingTicks} Ticks verbleibend)`
-    : 'Keine laufende Schulung';
-  personDetailBodyEl.appendChild(trainingBox);
+  const trainingSection = createSection('Schulung');
+  const trainingGrid = document.createElement('div');
+  trainingGrid.className = 'person-detail__training-grid';
 
-  const actions = document.createElement('div');
-  actions.className = 'detail-actions';
-  const learnHeader = document.createElement('div');
-  learnHeader.className = 'card-meta';
-  learnHeader.textContent = 'Schulung starten';
-  actions.appendChild(learnHeader);
+  if (person.training) {
+    const activeCard = document.createElement('div');
+    activeCard.className = 'card person-detail__card';
+    const header = document.createElement('div');
+    header.className = 'training-card__header';
+    const title = document.createElement('h4');
+    title.className = 'training-card__title';
+    title.textContent = 'Aktive Schulung';
+    const subtitle = document.createElement('p');
+    subtitle.className = 'training-card__subtitle';
+    subtitle.textContent = `${qualificationTitle(game, person.training.qualificationCode)} • ${person.training.remainingTicks} Ticks verbleibend`;
+    header.appendChild(title);
+    header.appendChild(subtitle);
+
+    const actions = document.createElement('div');
+    actions.className = 'card__actions';
+    const runningBtn = document.createElement('button');
+    runningBtn.className = 'btn btn--soft btn--pill';
+    runningBtn.textContent = 'Schulung läuft';
+    runningBtn.disabled = true;
+    actions.appendChild(runningBtn);
+
+    activeCard.appendChild(header);
+    activeCard.appendChild(actions);
+    trainingGrid.appendChild(activeCard);
+  }
 
   const availableQualifications = game.qualifications.filter(
     (q) => q.enabled && !person.qualifications.includes(q.code),
   );
 
-  if (!availableQualifications.length) {
+  if (!availableQualifications.length && !person.training) {
     const none = document.createElement('div');
-    none.className = 'card-meta';
-    none.textContent = 'Keine weiteren Schulungen verfügbar.';
-    actions.appendChild(none);
-  } else {
-    for (const qual of availableQualifications) {
-      const row = document.createElement('div');
-      row.className = 'detail-train-row';
-      const label = document.createElement('div');
-      label.textContent = `${qual.title} (${qual.learningDuration} Ticks)`;
-      const cost = document.createElement('div');
-      cost.className = 'card-meta';
-      cost.textContent =
-        'Kosten: ' + (qual.costs.length ? formatResourceDeltaList(qual.costs) : 'keine');
-      const btn = document.createElement('button');
-      btn.textContent = 'Schulung';
-      btn.disabled = !!person.training;
-      if (person.training) {
-        btn.title = 'Person befindet sich bereits in einer Schulung.';
-      }
-      btn.addEventListener('click', () => {
-        const err = startTraining(game, person.id, qual.code);
-        if (err) {
-          game.messages.push(err);
-        }
-        renderAll(game);
-      });
-      row.appendChild(label);
-      row.appendChild(cost);
-      row.appendChild(btn);
-      actions.appendChild(row);
-    }
+    none.className = 'card person-detail__card';
+    const msg = document.createElement('div');
+    msg.className = 'card__meta';
+    msg.textContent = 'Keine Schulungen verfügbar.';
+    none.appendChild(msg);
+    trainingGrid.appendChild(none);
   }
 
-  personDetailBodyEl.appendChild(actions);
+  for (const qual of availableQualifications) {
+    const trainingCard = document.createElement('div');
+    trainingCard.className = 'card person-detail__card';
+    const header = document.createElement('div');
+    header.className = 'training-card__header';
+    const title = document.createElement('h4');
+    title.className = 'training-card__title';
+    title.textContent = qual.title;
+    const subtitle = document.createElement('p');
+    subtitle.className = 'training-card__subtitle';
+    subtitle.textContent = `${qual.learningDuration} Ticks`;
+    header.appendChild(title);
+    header.appendChild(subtitle);
+
+    const cost = document.createElement('div');
+    cost.className = 'card__meta';
+    cost.textContent = 'Kosten: ' + (qual.costs.length ? formatResourceDeltaList(qual.costs) : 'keine');
+
+    const actions = document.createElement('div');
+    actions.className = 'card__actions';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn--primary btn--pill';
+    btn.textContent = 'Schulung starten';
+    btn.disabled = !!person.training;
+    if (person.training) {
+      btn.title = 'Person befindet sich bereits in einer Schulung.';
+    }
+    btn.addEventListener('click', () => {
+      const err = startTraining(game, person.id, qual.code);
+      if (err) {
+        game.messages.push(err);
+      }
+      renderAll(game);
+    });
+    actions.appendChild(btn);
+
+    trainingCard.appendChild(header);
+    trainingCard.appendChild(cost);
+    trainingCard.appendChild(actions);
+    trainingGrid.appendChild(trainingCard);
+  }
+
+  trainingSection.appendChild(trainingGrid);
+
+  personDetailBodyEl.appendChild(impactSection);
+  personDetailBodyEl.appendChild(dataSection);
+  personDetailBodyEl.appendChild(qualSection);
+  personDetailBodyEl.appendChild(trainingSection);
 }
 
 function renderPopup(game: GameState): void {
@@ -1093,6 +1301,7 @@ export function renderAll(game: GameState): void {
   if (!menuActive) {
     if (game.screen === 'build') {
       renderBuildMenu(game);
+      renderGridLegend(game);
       renderGrid(game);
     } else if (game.screen === 'personnel') {
       renderModuleList(game);
@@ -1116,6 +1325,8 @@ export function initUi(
   timeDisplayEl = document.getElementById('time-display')!;
   buildMenuEl = document.getElementById('build-menu')!;
   gridEl = document.getElementById('grid')!;
+  gridLegendEl = document.getElementById('grid-legend')!;
+  gridSelectionEl = document.getElementById('grid-selection')!;
   logEl = document.getElementById('log')!;
   popupEl = document.getElementById('event-popup')!;
   popupTitleEl = document.getElementById('popup-title')!;
@@ -1142,6 +1353,7 @@ export function initUi(
   unassignedFilterBtn = document.getElementById('filter-unassigned') as HTMLButtonElement;
   moduleViewModeSelect = document.getElementById('module-view-mode') as HTMLSelectElement;
   personDetailHeaderEl = document.getElementById('person-detail-name')!;
+  personDetailModuleEl = document.getElementById('person-detail-module')!;
   personDetailBodyEl = document.getElementById('person-detail-body')!;
   personDetailBackBtn = document.getElementById('person-detail-back') as HTMLButtonElement;
   onChooseEventOption = onConfirmEvent;

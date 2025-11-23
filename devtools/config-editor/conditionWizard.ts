@@ -13,6 +13,17 @@ interface WizardOptions {
   resourceSuggestions: string[];
 }
 
+type WizardConditionState = {
+  type: ConditionConfig['type'];
+  comparator: Comparator;
+  resource: string;
+  value?: number;
+  flag: string;
+  timer: string;
+  ticksGte?: number;
+  daysGte?: number;
+};
+
 const comparators: Comparator[] = ['lt', 'lte', 'gt', 'gte', 'eq', 'neq'];
 
 const createField = (label: string, input: HTMLElement, helper?: string): HTMLElement => {
@@ -54,12 +65,19 @@ const createSelect = <T extends string>(
   return select;
 };
 
-const createNumberInput = (value: number, onChange: (val: number) => void, placeholder?: string): HTMLInputElement => {
+const createNumberInput = (
+  value: number | undefined,
+  onChange: (val: number | undefined) => void,
+  placeholder?: string,
+): HTMLInputElement => {
   const input = document.createElement('input');
   input.type = 'number';
-  input.value = String(value);
+  input.value = value === undefined ? '' : String(value);
   if (placeholder) input.placeholder = placeholder;
-  input.addEventListener('input', () => onChange(Number(input.value || 0)));
+  input.addEventListener('input', () => {
+    const num = input.value === '' ? undefined : Number(input.value);
+    onChange(Number.isNaN(num as number) ? undefined : (num as number));
+  });
   return input;
 };
 
@@ -92,9 +110,27 @@ const createTextInput = (
   return input;
 };
 
+const mergeTimeCondition = (state: WizardConditionState): TimeConditionConfig => {
+  const condition: TimeConditionConfig = { type: 'time' };
+  const hasTicks = typeof state.ticksGte === 'number';
+  const hasDays = typeof state.daysGte === 'number';
+  if (hasTicks) condition.ticksGte = state.ticksGte;
+  if (hasDays) condition.daysGte = state.daysGte;
+  if (!hasTicks && !hasDays) {
+    condition.ticksGte = 0;
+  }
+  return condition;
+};
+
 export const createConditionWizard = (options: WizardOptions): HTMLElement => {
-  let currentType: ConditionConfig['type'] = 'resource';
-  let latestComparator: Comparator = 'gte';
+  const state: WizardConditionState = {
+    type: 'resource',
+    comparator: 'gte',
+    resource: '',
+    value: 0,
+    flag: '',
+    timer: '',
+  };
 
   const wrapper = document.createElement('div');
   wrapper.className = 'devcfg-card';
@@ -103,55 +139,69 @@ export const createConditionWizard = (options: WizardOptions): HTMLElement => {
   heading.textContent = 'Condition Wizard';
   wrapper.appendChild(heading);
 
+  const intro = document.createElement('p');
+  intro.textContent = 'Wähle den Condition-Typ aus und fülle die passenden Felder aus.';
+  wrapper.appendChild(intro);
+
   const formArea = document.createElement('div');
   formArea.className = 'devcfg-wizard-form';
 
-  const inputs: Record<string, HTMLInputElement | HTMLSelectElement> = {};
-
   const renderFields = (): void => {
     formArea.innerHTML = '';
-    inputs.resource = createTextInput('', (v) => (inputs.resource.value = v), options.resourceSuggestions, 'Ressourcen-ID', wrapper);
-    inputs.flag = createTextInput('', (v) => (inputs.flag.value = v), [], 'Quest-Flag', wrapper);
-    inputs.timer = createTextInput('', (v) => (inputs.timer.value = v), [], 'Quest-Timer', wrapper);
-    inputs.value = createNumberInput(0, (v) => (inputs.value.value = String(v)), 'Zahl');
-    inputs.ticksGte = createNumberInput(0, (v) => (inputs.ticksGte.value = String(v)), 'Ticks');
-    inputs.daysGte = createNumberInput(0, (v) => (inputs.daysGte.value = String(v)), 'Tage');
 
     const comparatorSelect = createSelect(comparators, (val) => {
-      latestComparator = val;
-    }, latestComparator);
-    inputs.comparator = comparatorSelect;
+      state.comparator = val;
+    }, state.comparator);
 
-    switch (currentType) {
-      case 'resource':
-        formArea.appendChild(createField('Ressource', inputs.resource));
+    switch (state.type) {
+      case 'resource': {
+        formArea.appendChild(
+          createField(
+            'Ressource',
+            createTextInput(state.resource, (v) => (state.resource = v), options.resourceSuggestions, 'Ressourcen-ID', wrapper),
+          ),
+        );
         formArea.appendChild(createField('Vergleich', comparatorSelect));
-        formArea.appendChild(createField('Schwelle', inputs.value));
+        formArea.appendChild(
+          createField('Schwelle', createNumberInput(state.value, (v) => (state.value = v ?? 0), 'Zahl')),
+        );
         break;
-      case 'questFlag':
-        formArea.appendChild(createField('Quest-Flag', inputs.flag));
+      }
+      case 'questFlag': {
+        formArea.appendChild(
+          createField('Quest-Flag', createTextInput(state.flag, (v) => (state.flag = v), [], 'quest_flag', wrapper)),
+        );
         formArea.appendChild(createField('Vergleich', comparatorSelect));
-        formArea.appendChild(createField('Wert', inputs.value));
+        formArea.appendChild(createField('Wert', createNumberInput(state.value, (v) => (state.value = v ?? 0), 'Zahl')));
         break;
-      case 'questTimer':
-        formArea.appendChild(createField('Quest-Timer', inputs.timer));
+      }
+      case 'questTimer': {
+        formArea.appendChild(
+          createField('Quest-Timer', createTextInput(state.timer, (v) => (state.timer = v), [], 'quest_timer', wrapper)),
+        );
         formArea.appendChild(createField('Vergleich', comparatorSelect));
-        formArea.appendChild(createField('Wert', inputs.value));
+        formArea.appendChild(createField('Wert', createNumberInput(state.value, (v) => (state.value = v ?? 0), 'Zahl')));
         break;
-      case 'time':
-        formArea.appendChild(createField('Ticks ≥', inputs.ticksGte, 'Optional'));
-        formArea.appendChild(createField('Tage ≥', inputs.daysGte, 'Optional'));
+      }
+      case 'time': {
+        formArea.appendChild(
+          createField('Ticks ≥', createNumberInput(state.ticksGte, (v) => (state.ticksGte = v), 'Optional')), 
+        );
+        formArea.appendChild(
+          createField('Tage ≥', createNumberInput(state.daysGte, (v) => (state.daysGte = v), 'Optional')),
+        );
         break;
+      }
     }
   };
 
   const typeSelect = createSelect<ConditionConfig['type']>(
     ['resource', 'time', 'questFlag', 'questTimer'],
     (value) => {
-      currentType = value;
+      state.type = value;
       renderFields();
     },
-    currentType,
+    state.type,
   );
 
   wrapper.appendChild(createField('Condition-Typ', typeSelect));
@@ -162,40 +212,42 @@ export const createConditionWizard = (options: WizardOptions): HTMLElement => {
   addBtn.addEventListener('click', () => {
     let condition: ConditionConfig;
 
-    if (currentType === 'resource') {
+    if (state.type === 'resource') {
       const cond: ResourceConditionConfig = {
         type: 'resource',
-        resource: (inputs.resource as HTMLInputElement).value || 'resource',
-        comparator: (inputs.comparator as HTMLSelectElement).value as Comparator,
-        value: Number((inputs.value as HTMLInputElement).value || 0),
+        resource: state.resource || options.resourceSuggestions[0] || 'resource',
+        comparator: state.comparator,
+        value: state.value ?? 0,
       };
       condition = cond;
-    } else if (currentType === 'questFlag') {
+    } else if (state.type === 'questFlag') {
       const cond: QuestFlagConditionConfig = {
         type: 'questFlag',
-        flag: (inputs.flag as HTMLInputElement).value || 'flag',
-        comparator: (inputs.comparator as HTMLSelectElement).value as Comparator,
-        value: Number((inputs.value as HTMLInputElement).value || 0),
+        flag: state.flag || 'quest_flag',
+        comparator: state.comparator,
+        value: state.value ?? 0,
       };
       condition = cond;
-    } else if (currentType === 'questTimer') {
+    } else if (state.type === 'questTimer') {
       const cond: QuestTimerConditionConfig = {
         type: 'questTimer',
-        timer: (inputs.timer as HTMLInputElement).value || 'timer',
-        comparator: (inputs.comparator as HTMLSelectElement).value as Comparator,
-        value: Number((inputs.value as HTMLInputElement).value || 0),
+        timer: state.timer || 'quest_timer',
+        comparator: state.comparator,
+        value: state.value ?? 0,
       };
       condition = cond;
     } else {
-      const cond: TimeConditionConfig = { type: 'time' };
-      const ticksVal = Number((inputs.ticksGte as HTMLInputElement).value || 0);
-      const daysVal = Number((inputs.daysGte as HTMLInputElement).value || 0);
-      if (!Number.isNaN(ticksVal)) cond.ticksGte = ticksVal;
-      if (!Number.isNaN(daysVal)) cond.daysGte = daysVal;
-      condition = cond;
+      condition = mergeTimeCondition(state);
     }
 
     options.onAdd(condition);
+
+    state.resource = '';
+    state.flag = '';
+    state.timer = '';
+    state.value = 0;
+    state.ticksGte = undefined;
+    state.daysGte = undefined;
     renderFields();
   });
   wrapper.appendChild(addBtn);
