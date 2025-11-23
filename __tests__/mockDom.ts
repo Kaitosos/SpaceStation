@@ -33,15 +33,25 @@ class MockElement {
   parent: MockElement | null = null;
   textContent = '';
   value = '';
+  title = '';
   dataset: Record<string, string> = {};
-  style: Record<string, string> = {};
+  style: Record<string, any> = {};
   listeners: Record<string, ((ev: any) => void)[]> = {};
   classList: MockClassList;
+  attributes: Record<string, string> = {};
   private _innerHTML = '';
 
   constructor(tag: string) {
     this.tagName = tag.toUpperCase();
     this.classList = new MockClassList(this);
+    const style: any = {};
+    style.setProperty = (name: string, value: string) => {
+      style[name] = value;
+    };
+    style.removeProperty = (name: string) => {
+      delete style[name];
+    };
+    this.style = style;
   }
 
   get innerHTML() {
@@ -78,6 +88,26 @@ class MockElement {
     event.target = event.target || this;
     const handlers = this.listeners[event.type] || [];
     handlers.forEach((h) => h.call(this, event));
+  }
+
+  setAttribute(name: string, value: string) {
+    this.attributes[name] = value;
+    if (name === 'class') {
+      this.className = value;
+    }
+    if (name === 'title') {
+      this.title = value;
+    }
+  }
+
+  removeAttribute(name: string) {
+    delete this.attributes[name];
+    if (name === 'class') {
+      this.className = '';
+    }
+    if (name === 'title') {
+      this.title = '';
+    }
   }
 
   closest(selector: string): MockElement | null {
@@ -138,6 +168,8 @@ export function setupMockDom() {
     'time-display',
     'build-menu',
     'grid',
+    'grid-legend',
+    'grid-selection',
     'log',
     'event-popup',
     'popup-title',

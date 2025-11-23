@@ -273,32 +273,47 @@
     }
 
     #build-screen {
-      grid-template-columns: 240px 1fr;
+      grid-template-columns: 1fr;
+      padding: var(--space-5);
+      align-content: start;
+      overflow: hidden;
+    }
+
+    .build-layout {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: var(--space-4);
+      align-items: start;
+      min-height: 0;
+    }
+
+    .build-panel,
+    .build-grid-panel {
+      min-height: 0;
     }
 
     #build-menu {
-      padding: var(--space-4);
-      border-right: 1px solid var(--color-border-strong);
-      background: var(--color-surface-1);
-      overflow-y: auto;
       display: grid;
       gap: var(--space-3);
       align-content: start;
+      max-height: 100%;
+      overflow: auto;
     }
 
-    #build-menu h2 {
-      margin: 0;
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--color-accent-pink);
+    .build-toolbar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+      justify-content: space-between;
     }
 
     .build-filter {
       display: flex;
       align-items: center;
       gap: var(--space-2);
-      margin-bottom: var(--space-2);
       font-size: 12px;
       color: var(--color-text-muted);
     }
@@ -314,6 +329,8 @@
     .build-card {
       width: 100%;
       text-align: left;
+      align-content: start;
+      gap: var(--space-3);
     }
 
     .build-card .card__meta {
@@ -325,8 +342,12 @@
       color: var(--color-text-dim);
     }
 
+    .build-card .badge-row {
+      gap: var(--space-2);
+    }
+
     .build-image {
-      margin-top: var(--space-2);
+      margin-top: var(--space-1);
       height: 72px;
       border-radius: var(--radius-md);
       background: rgba(15, 15, 40, 0.7);
@@ -335,11 +356,64 @@
       border: 1px solid var(--color-border);
     }
 
+    .build-grid-panel {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .build-grid-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .grid-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      align-items: center;
+    }
+
+    .grid-legend__label {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .grid-legend .badge {
+      font-size: 11px;
+    }
+
+    .build-selection-label {
+      font-size: 12px;
+      color: var(--color-text-dim);
+    }
+
+    #grid-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      background: var(--color-surface-1);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-3);
+      box-shadow: var(--shadow-elevated);
+      min-height: 0;
+    }
+
     #grid-container {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 10px;
+      padding: var(--space-3);
+      border-radius: var(--radius-md);
+      border: 1px dashed var(--color-border);
+      background: radial-gradient(circle at top, rgba(10, 10, 30, 0.65), rgba(5, 5, 15, 0.85));
+      overflow: auto;
+      min-height: 360px;
     }
 
     #grid {
@@ -350,6 +424,7 @@
       border-radius: 12px;
       border: 1px solid rgba(60, 60, 120, 0.9);
       box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+      --grid-hover-color: #00f5ff;
     }
 
     .cell {
@@ -369,11 +444,13 @@
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
+      position: relative;
     }
 
     .cell:hover {
-      border-color: #00f5ff;
+      border-color: var(--grid-hover-color, #00f5ff);
       transform: translateY(-1px);
+      box-shadow: 0 0 0 1px var(--grid-hover-color, #00f5ff);
     }
 
     .cell.empty {
@@ -408,6 +485,19 @@
     .cell.building-dock {
       background: linear-gradient(135deg, #4d2d34, #261217);
       border-color: #ffb86c;
+    }
+
+    .cell[data-preview]:hover::after {
+      content: attr(data-preview);
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--grid-hover-color, #00f5ff);
+      font-weight: 700;
+      background: rgba(0, 245, 255, 0.06);
+      border-radius: inherit;
     }
 
     #screen-tabs {
@@ -915,9 +1005,31 @@
 
   <div id="main">
     <div id="build-screen" class="screen active">
-      <div id="build-menu"></div>
-      <div id="grid-container">
-        <div id="grid"></div>
+      <div class="management-layout build-layout">
+        <div class="panel build-panel">
+          <div class="panel-header">
+            <h3>Bau &amp; Module</h3>
+            <div class="badge badge--info">Sidebar</div>
+          </div>
+          <div id="build-menu"></div>
+        </div>
+        <div class="panel build-grid-panel">
+          <div class="panel-header">
+            <h3>Baubereich</h3>
+            <div class="badge badge--success">Grid</div>
+          </div>
+          <div class="build-grid-meta">
+            <div class="grid-legend" id="grid-legend">
+              <span class="grid-legend__label">Legende</span>
+            </div>
+            <div class="build-selection-label" id="grid-selection"></div>
+          </div>
+          <div id="grid-wrapper">
+            <div id="grid-container">
+              <div id="grid"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
